@@ -5,8 +5,7 @@
 #include <string>
 #include <vector>
 
-#include <cpplocate/cpplocate_api.h>
-
+#include "cpplocate_api.h"
 
 namespace cpplocate
 {
