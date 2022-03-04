@@ -31,6 +31,14 @@
 #include <reactphysics3d/mathematics/mathematics_functions.h>
 #include <reactphysics3d/decimal.h>
 
+
+namespace CYLLENE_SDK {
+  class Vector2i;
+  class Vector2f;
+  class Vector3f;
+
+}
+
 /// ReactPhysics3D namespace
 namespace reactphysics3d {
 
@@ -57,6 +65,10 @@ struct Vector2 {
 
         /// Constructor with arguments
         Vector2(decimal newX, decimal newY);
+
+        Vector2(const CYLLENE_SDK::Vector2i& v);
+        Vector2(const CYLLENE_SDK::Vector2f& v);
+        Vector2(const CYLLENE_SDK::Vector3f& v);
 
         /// Set all the values of the vector
         void setAllValues(decimal newX, decimal newY);

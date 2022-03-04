@@ -34,6 +34,10 @@
 #include <reactphysics3d/mathematics/mathematics_common.h>
 #include <reactphysics3d/configuration.h>
 
+namespace CYLLENE_SDK {
+  class Vector3f;
+}
+
 /// ReactPhysics3D namespace
 namespace reactphysics3d {
 
@@ -60,6 +64,8 @@ struct Vector3 {
 
         /// Constructor of the struct Vector3
         Vector3();
+
+        Vector3(const CYLLENE_SDK::Vector3f& v);
 
         /// Constructor with arguments
         Vector3(decimal newX, decimal newY, decimal newZ);

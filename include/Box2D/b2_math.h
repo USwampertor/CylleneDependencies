@@ -37,11 +37,19 @@ inline bool b2IsValid(float x)
 #define	b2Sqrt(x)	sqrtf(x)
 #define	b2Atan2(y, x)	atan2f(y, x)
 
+namespace CYLLENE_SDK {
+	class Vector2f;
+	class Vector2i;
+}
 /// A 2D column vector.
 struct B2_API b2Vec2
 {
 	/// Default constructor does nothing (for performance).
 	b2Vec2() = default;
+
+	b2Vec2(const CYLLENE_SDK::Vector2f&);
+
+	b2Vec2(const CYLLENE_SDK::Vector2i&);
 
 	/// Construct using coordinates.
 	b2Vec2(float xIn, float yIn) : x(xIn), y(yIn) {}

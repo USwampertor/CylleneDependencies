@@ -30,6 +30,12 @@
 #include <reactphysics3d/decimal.h>
 #include <reactphysics3d/mathematics/Vector3.h>
 
+namespace CYLLENE_SDK {
+  class Quaternion;
+  class Vector4f;
+  class Vector3f;
+}
+
 /// ReactPhysics3D namespace
 namespace reactphysics3d {
 
@@ -63,6 +69,12 @@ struct Quaternion {
 
         /// Constructor
         Quaternion();
+
+        Quaternion(const CYLLENE_SDK::Quaternion& q);
+
+        Quaternion(const CYLLENE_SDK::Vector3f& q);
+        
+        Quaternion(const CYLLENE_SDK::Vector4f& q);
 
         /// Constructor with arguments
         Quaternion(decimal newX, decimal newY, decimal newZ, decimal newW);

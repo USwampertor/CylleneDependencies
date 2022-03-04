@@ -30,6 +30,10 @@
 #include <cassert>
 #include <reactphysics3d/mathematics/Vector2.h>
 
+namespace CYLLENE_SDK {
+  class Matrix2x2;
+}
+
 /// ReactPhysics3D namespace
 namespace reactphysics3d {
 
@@ -52,6 +56,8 @@ class Matrix2x2 {
 
         /// Constructor
         Matrix2x2();
+
+        Matrix2x2(const CYLLENE_SDK::Matrix2x2& m);
 
         /// Constructor
         Matrix2x2(decimal value);
