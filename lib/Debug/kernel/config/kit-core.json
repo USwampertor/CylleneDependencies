@@ -1,0 +1,187 @@
+{
+    "log": {
+        "level": "Info",
+        "outputStreamLevel": "Warning",
+        "debugConsoleLevel": "Warning",
+        "fileLogLevel": "Info",
+        "file": "${logs}/kit_${start_timestamp}.log",
+        "fileMaxCount": 30, // Needs to be fixed for parallel run: OM-73844
+        "includeTimeStamp": true,
+        "setElapsedTimeUnits": "milliseconds"
+    },
+    "omni.kit.plugin": {
+        "usdWorkConcurrencyLimit": 0,
+        "usdMuteDiagnosticMessage": true,
+        "createXformForTypelessReference": true,
+        "createExplicitRefForNoneDefaultPrim": true
+    },
+    "app": {
+        "window": {
+            "minimalPanelsOnStartup": false,
+            "toolBarHorizontal": false,
+            "displayModeLock": false,
+            "uiStyle": "NvidiaDark"
+        },
+        "exts" : {
+            // Folders with extensions and apps that come with kit-sdk
+            "foldersCore" : [
+                "${kit}/apps",
+                "${kit}/exts",
+                "${kit}/extscore",
+                "${app_documents}/exts",
+                "${shared_documents}/exts",
+            ],
+            // App/user added folders. Here will also be merged all folders added with `--ext-folder` or .kit files.
+            "folders" : [
+                "${kit}/extsPhysics",
+            ]
+        },
+        "extensions": {
+            "registryCache": "${data}/exts",
+            "registryVersion": "3",
+            "registryEnabled": true,
+            "registryExtension": "omni.kit.registry.nucleus",
+            "registryPublishDefault": "kit/default",
+            "pathProtocolExtensions": ["omni.kit.extpath.git"],
+            "supportedTargets":{
+                "platform": ["windows-x86_64", "linux-x86_64"],
+                "config": ["debug", "release"]
+            },
+            "enabledCore": [],
+            "fsWatcherEnabled": true
+        },
+        "python": {
+            "sysPaths": [
+                "${kit}/kernel/py",
+                "${kit}/plugins/bindings-python" // TODO: Remove when everything there was moved into extensions
+            ],
+            "extraPaths": [],
+            "scriptFolders": [
+                "${kit}/scripts",
+                "${app_documents}/scripts",
+                "${shared_documents}/scripts",
+            ],
+        },
+        "captureFrame": {
+            "viewport": false,
+            "path": "${shared_documents}/screenshots"
+        },
+        "hangDetector": {
+            "enabled": false,
+            "timeout": 120
+        },
+        "omniverse": {
+            "defaultServer": "localhost:3009",
+            "showPwdField": false,
+            "showLoginOnStart": false,
+            "autoLoginOnStart": false
+        },
+        "file": {
+            "ignoreUnsavedOnExit": false,
+            "browserIconSize": 60
+        },
+        "renderer": {
+            "resolution": {
+                "list": [3840, 2160, 2048, 1080, 1920, 1080, 1280, 720, 1024, 1024, 512, 512],
+                "multiplierList": [2.0, 1.0, 0.666666666666, 0.5, 0.333333333333, 0.25],
+                "width": 1280,
+                "height": 720
+            }
+        },
+        "userConfigPath": "${data}/user.config.json",
+        "profileFromStart": false, // Enable to start profiling from app startup
+        "uploadDumpsOnStartup": false // kit will explicitly upload old dumps after privacy.toml load
+    },
+    "renderer": {
+        "mdl": {
+            "searchPaths": {
+                "required": "${kit}/mdl/rtx/;${kit}/mdl/rtx/iray/",
+                "templates": "${kit}/mdl/core/Base/;${kit}/mdl/core/Ue4/;${kit}/mdl/core/Aperture/;${kit}/mdl/core/VRay/;${kit}/mdl/core/Volume/;${kit}/mdl/core/mdl/"
+            }
+        }
+    },
+    "exts": {
+        "omni.kit.pipapi": {
+            "envPath": "${data}/pip3-envs/default"
+        },
+        "omni.kit.registry.nucleus": {
+            "registries": [
+                { "name": "kit/default", "url": "omniverse://kit-extensions.ov.nvidia.com/exts/kit/default" },
+                { "name": "kit/sdk", "url": "omniverse://kit-extensions.ov.nvidia.com/exts/kit/sdk/${kit_version_short}/${kit_git_hash}" }
+            ]
+        },
+    },
+    "crashreporter": {
+        "product": "OmniverseKit",
+        "dumpDir": "${data}",
+
+        // the following fields are set by enable_backtrace.py based on the TC build:
+        // "_crashreporter_url": "https://services.nvidia.com/submit",
+        // "_crashreporter_version": "undefined",
+        "data": {
+            // "_crashreporter_build": "",
+        }
+    },
+    "plugins": {
+        "carb.scripting-python.plugin": {
+            "pythonHome": "python",
+            "pythonPath": "python/python310.zip",
+            "pythonFlags": {
+                "Py_NoUserSiteDirectory": 1,
+                "Py_UnbufferedStdioFlag": 1,
+                "Py_IgnoreEnvironmentFlag": 1
+            },
+            "logScriptErrors": true
+        },
+        "carb.profiler-cpu.plugin": {
+            "saveProfile": false, // Enable to start saving to a profile file from startup
+        }
+    },
+    // Uncomment the following seven lines if any old content relying on these search paths stops working
+    // "renderer": {
+    //     "mdl": {
+    //         "searchPaths": {
+    //             "server" : "/;/Library/Materials/Templates/Base/;/Library/Materials/Templates/Staging/;/Library/Materials/Templates/GTC19/;/Library/Materials/Templates/SurfaceTypes/;/Library/Materials/Collections/;/Library/Materials/Collections/OmniverseMaterials/;/Library/Materials/Collections/Iray/;"
+    //         }
+    //     }
+    // },
+    "rtx": {
+        "renderingDataPath": "/rendering-data",
+        "shaderDb": {
+            "basepath": "/shaders",
+        },
+        "reshade": {
+            "presetFilePath": "",
+            "effectSearchDirPath": ""
+        },
+        "materialDb": {
+            "flattener": {
+                "reflection_roughness_constant": [ "reflection_roughness_constant", "frosting_roughness" ],
+                "transmittance_color": [ "transmittance_color", "glass_color" ],
+                "ior_constant": [ "ior_constant", "glass_ior" ]
+            }
+        },
+    },
+    "rtx-transient": {
+        "resourcemanager": {
+            "localTextureCachePath": "${omni_global_cache}/texturecache"
+        },
+    },
+    "rtx-defaults": {
+        "renderingDataPath": "/rendering-data",
+        "shaderDb": {
+            "basepath": "/shaders",
+        },
+        "reshade": {
+            "presetFilePath": "",
+            "effectSearchDirPath": ""
+        },
+        "materialDb": {
+            "flattener": {
+                "reflection_roughness_constant": [ "reflection_roughness_constant", "frosting_roughness" ],
+                "transmittance_color": [ "transmittance_color", "glass_color" ],
+                "ior_constant": [ "ior_constant", "glass_ior" ]
+            }
+        },
+    },
+}

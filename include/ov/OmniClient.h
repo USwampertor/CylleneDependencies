@@ -1,8 +1,8 @@
-// Copyright (c) 2020-2022, NVIDIA CORPORATION. All rights reserved.
+// Copyright (c) 2020-2023, NVIDIA CORPORATION. All rights reserved.
 //
 // NVIDIA CORPORATION and its licensors retain all intellectual property
 // and proprietary rights in and to this software, related documentation
-// and any modifications thereto.  Any use, reproduction, disclosure or
+// and any modifications thereto. Any use, reproduction, disclosure or
 // distribution of this software and related documentation without an express
 // license agreement from NVIDIA CORPORATION is strictly prohibited.
 //
@@ -113,6 +113,20 @@ OMNICLIENT_EXPORT(char const*)
     omniClientGetVersionString()
     OMNICLIENT_NOEXCEPT;
 
+//! Sets product information that's sent to Nucleus when connecting.
+//! 
+//! If you're already connected to a Nucleus server, this will not send the new values to the server,
+//! only on reconnect. For this reason you should set the product information prior to connecting.
+//!
+//! This is also used in Hub to help identify which applications are running.
+//!
+//! @param name is the human-readable name of this product.
+//! @param version is the version of this product (not the client library version).
+//! @param extra is any additional information you think would be valuable in the logs.
+OMNICLIENT_EXPORT(void)
+    omniClientSetProductInfo(char const* name, char const* version, char const* extra)
+    OMNICLIENT_NOEXCEPT;
+
 //! @}
 
 //! @defgroup content Content
@@ -146,7 +160,7 @@ OMNICLIENT_EXPORT(struct OmniClientContent) omniClientReferenceContent(void* buf
 //! of the buffer by calling this function. The library will not free the buffer, so you are required to call
 //! @ref omniClientFreeContent when you are finished with it.
 //!
-//! If it's not posible to take ownership of the buffer (because it was referenced rather than allocated) then
+//! If it's not possible to take ownership of the buffer (because it was referenced rather than allocated) then
 //! this will fall back to calling @ref omniClientCopyContent
 OMNICLIENT_EXPORT(struct OmniClientContent) omniClientMoveContent(struct OmniClientContent* content) OMNICLIENT_NOEXCEPT;
 
@@ -157,7 +171,7 @@ OMNICLIENT_EXPORT(struct OmniClientContent) omniClientCopyContent(struct OmniCli
 
 //! Free an allocated content buffer
 //!
-//! It's safe to call this with a content buffer that was refrenced with @ref omniClientReferenceContent (though the content will
+//! It's safe to call this with a content buffer that was referenced with @ref omniClientReferenceContent (though the content will
 //! obviously not actually be freed). This function also clears the structure (setting size to 0, buffer to nullptr, etc)
 OMNICLIENT_EXPORT(void) omniClientFreeContent(struct OmniClientContent* content) OMNICLIENT_NOEXCEPT;
 
@@ -182,12 +196,30 @@ inline void omniClientFreeContent(OmniClientContent& content) noexcept
 //! @{
 
 //! Connection Status
+//!
+//! Valid transitions:
+//! Disconnected -> Connecting or InvalidHost
+//! Connecting -> All except Disconnected
+//! Connected -> Disconnected or SignedOut
 typedef enum
 {
     eOmniClientConnectionStatus_Connecting, ///< Attempting to connect
     eOmniClientConnectionStatus_Connected, ///< Successfully connected
-    eOmniClientConnectionStatus_ConnectError, ///< Error trying to connect
-    eOmniClientConnectionStatus_Disconnected, ///< Disconnected
+
+    eOmniClientConnectionStatus_ConnectError, ///< Connection error while trying to connect
+    eOmniClientConnectionStatus_Disconnected, ///< Disconnected after a sucessful connection
+
+    eOmniClientConnectionStatus_SignedOut, ///< omniClientSignOut called
+
+    eOmniClientConnectionStatus_NoUsername, ///< No username was provided (this can only happen when connecting to servers without discovery)
+    eOmniClientConnectionStatus_AuthAbort, ///< Application returned an abort code in the callback provided to omniClientRegisterAuthCallback
+    eOmniClientConnectionStatus_AuthCancelled, ///< User clicked "Cancel" or the application called omniClientAuthenticationCancel
+    eOmniClientConnectionStatus_AuthError, ///< Internal error while trying to authenticate
+    eOmniClientConnectionStatus_AuthFailed, ///< Authentication failed
+
+    eOmniClientConnectionStatus_ServerIncompatible, ///< The server is not compatible with this version of the client library
+
+    eOmniClientConnectionStatus_InvalidHost, ///< The host name is invalid
 
     Count_eOmniClientConnectionStatus
 } OmniClientConnectionStatus;
@@ -232,11 +264,20 @@ typedef enum
     //! Deleting a file
     eOmniClientFileStatus_Deleting,
 
-    //! Sending a live update
+    //! Obliterating a file
+    eOmniClientFileStatus_Obliterating,
+
+    //! Deprecated. Use @ref omniClientLiveRegisterQueuedCallback2
     eOmniClientFileStatus_LiveUpdateSending,
 
-    //! Received a live update
+    //! Deprecated. Use @ref omniClientLiveRegisterQueuedCallback2
     eOmniClientFileStatus_LiveUpdateReceived,
+
+    //! Performing a 'list' operation
+    eOmniClientFileStatus_Listing,
+
+    //! Performing a 'stat' operation
+    eOmniClientFileStatus_Stating,
 
     Count_eOmniClientFileStatus
 } OmniClientFileStatus;
@@ -294,7 +335,7 @@ typedef enum
     //! A different error (for example @ref eOmniClientResult_ErrorNotFound) indicates that Subscribe could not monitor the file.
     eOmniClientResult_OkNotYetFound,
 
-    //! An unknown error occured while processing the reuest
+    //! An unknown error occurred while processing the request
     eOmniClientResult_Error,
 
     //! The request failed because the connection to the server was lost (or could not be established in the first place)
@@ -327,6 +368,9 @@ typedef enum
 
     //! Returned by HTTP providers when server receives a malformed HTTP request
     eOmniClientResult_ErrorBadRequest,
+
+    //! Returned by Nucleus if a non-empty folder is obliterated
+    eOmniClientResult_FolderNotEmpty,
 
     Count_eOmniClientResult
 } OmniClientResult;
@@ -366,7 +410,7 @@ OMNICLIENT_EXPORT(bool)
 
 //! Redirect a URL to a different location
 //!
-//! For example alias("home:", "C:\Users\brianh\")
+//! For example omniClientSetAlias("home:", "C:\Users\myname\")
 //! Call it with dst=null to remove an alias
 OMNICLIENT_EXPORT(void)
     omniClientSetAlias(char const* src, char const* dst)
@@ -442,30 +486,31 @@ struct OmniClientUrl
     bool isRaw;             //!< True if this is a "raw" URL such as "C:\\file". Setting this to true prevents @ref omniClientMakeUrl from percent-encoding the path.
 };
 
-//! Parse a URL into the components pieces
+//! Break a URL into components
 //! 
-//! The full rules are mostly defined by https://tools.ietf.org/html/rfc3986
-//! Although the Omniverse client library has some special magic for dealing with:
-//! * malformed URLs
-//! * raw file paths
-//! * ov-web URLs
-//! The returned structure should be freed by @ref omniClientFreeUrl
+//! This assumes the URL is either a full URL (starting with a scheme such as "http:") or a raw local file path such as "C:\path" (Windows) or "/path" (Linux).
+//! 
+//! This affects percent-encoding and handling of ? and # for paths such as "/test%20test?", which will be decoded to "/test test" by
+//! @ref omniClientBreakUrlReference, but left as-is by @ref omniClientBreakUrl
+//!
+//! If the return value has "isRaw" set to true then "urlAbsolute" was determined to be a raw path, and only the "path" value is set.
 OMNICLIENT_EXPORT(struct OmniClientUrl*)
     omniClientBreakUrl(char const* url)
     OMNICLIENT_NOEXCEPT;
 
-//! This version of @ref omniClientBreakUrl behaves slightly differently for raw file paths
+//! Break a URL into components
 //! 
-//! This assumes the URL is either a full URL (starting with a scheme such as "http:") or a raw
-//! local file path such as "C:\path" (Windows) or "/path" (Linux).
-//! 
-//! This affects percent-encoding for relative paths such as "test%20test", which will
-//! be decoded to "test test" by @ref omniClientBreakUrl, but left as-is by omniClientBreakUrlAbsolute
+//! The full rules are defined by https://tools.ietf.org/html/rfc3986
+//!
+//! This version should be used instead of @ref omniClientBreakUrl if you have a URL reference such as "/path?query#fragment" which would
+//! be interpreted as a file path by @ref omniClientBreakUrl
+//!
+//! The returned structure should be freed by @ref omniClientFreeUrl
 OMNICLIENT_EXPORT(struct OmniClientUrl*)
-    omniClientBreakUrlAbsolute(char const* url)
+    omniClientBreakUrlReference(char const* urlReference)
     OMNICLIENT_NOEXCEPT;
 
-//! Free the URL structure allocated by @ref omniClientBreakUrl or @ref omniClientBreakUrlAbsolute
+//! Free the URL structure allocated by @ref omniClientBreakUrlReference or @ref omniClientBreakUrl
 OMNICLIENT_EXPORT(void)
     omniClientFreeUrl(struct OmniClientUrl* url)
     OMNICLIENT_NOEXCEPT;
@@ -521,6 +566,15 @@ OMNICLIENT_EXPORT(char*)
     omniClientCombineUrls(char const* baseUrl, char const* otherUrl, char* buffer, size_t* bufferSize)
     OMNICLIENT_NOEXCEPT;
 
+//! This combines a URL with an explicit base URL
+//!
+//! This differs from @ref omniClientCombineUrls in the return type and type of "baseUrl"
+//!
+//! Call @ref omniClientFreeUrl to free the returned structure.
+OMNICLIENT_EXPORT(struct OmniClientUrl*)
+    omniClientCombineUrls2(struct OmniClientUrl const* baseUrl, char const* otherUrl)
+    OMNICLIENT_NOEXCEPT;
+
 //! This calls @ref omniClientCombineUrls with the URL on the top of the stack
 //!
 //! @see omniClientPushBaseUrl
@@ -530,7 +584,8 @@ OMNICLIENT_EXPORT(char*)
 
 //! This calls @ref omniClientCombineUrls with the URL on the top of the stack
 //!
-//! It differs from @ref omniClientCombineWithBaseUrl only in the return value.
+//! It differs from @ref omniClientCombineWithBaseUrl only in the return type.
+//! 
 //! Call @ref omniClientFreeUrl to free the returned structure.
 //!
 //! @see omniClientPushBaseUrl
@@ -637,6 +692,32 @@ OMNICLIENT_EXPORT(void)
     omniClientReconnect(const char* url)
     OMNICLIENT_NOEXCEPT;
 
+//! Parameters to control retry behavior
+//!
+//! The formula for delay between retries is:
+//! delayMs = (baseMs * count * count) + rand(0, jitterMs * count)
+//! where "count" is the current retry count.
+//! 
+//! Retries are aborted after 'maxMs' time has elapsed. Set it to 0 to disable retries.
+//!
+//! Default behavior is:
+//! maxMs = 120,000
+//! baseMs = 100
+//! jitterMs = 100
+struct OmniClientRetryBehavior
+{
+    uint32_t maxMs; //!< Maximum amount of time (in milliseconds) to attempt to retry
+    uint32_t baseMs; //!< Base amount of time (in milliseconds) to delay between retries. This is multiplied by the current retry count squared.
+    uint32_t jitterMs; //!< Random amount of time (in milliseconds) to add to the delay between retries. This is multiplied by the current retry count.
+};
+
+//! Configure retry behavior
+//! 
+//! Returns the previous retry values
+OMNICLIENT_EXPORT(struct OmniClientRetryBehavior)
+    omniClientSetRetries(struct OmniClientRetryBehavior retryBehavior)
+    OMNICLIENT_NOEXCEPT;
+
 //! @}
 
 //! @defgroup query Server Querying
@@ -648,9 +729,12 @@ struct OmniClientServerInfo
     char const* version;        //!< The version of software the server is running
     char const* username;       //!< The username you are signed in as
     char const* authToken;      //!< The authentication token you are using (this should no longer be used)
+    char const* connectionId;   //!< Provider specific connection identifier (the same value other users see in the "from" field of OmniClientJoinChannelCallback when you send a message)
     bool cacheEnabled;          //!< True if the local nucleus cache is enabled for this server
     bool omniObjectsEnabled;    //!< True if omni-objects are enabled on this server
     bool checkpointsEnabled;    //!< True if checkpoints are enabled on this server
+    bool atomicCheckpoints;     //!< True if the server supports atomic checkpoints on write operations
+    bool undeleteEnabled;       //!< True if the server supports the "undelete" command
 };
 
 //! This is called with the results of @ref omniClientGetServerInfo
@@ -663,6 +747,23 @@ typedef void
 //! @note If this function is called after @ref omniClientShutdown, kInvalidRequestId will be returned, and the callback will not be called.
 OMNICLIENT_EXPORT(OmniClientRequestId)
     omniClientGetServerInfo(char const* url, void* userData, OmniClientGetServerInfoCallback callback)
+    OMNICLIENT_NOEXCEPT;
+
+//! This is called with the results of @ref omniClientRefreshAuthToken
+typedef void
+    (OMNICLIENT_ABI* OmniClientRefreshAuthTokenCallback)(void* userData, OmniClientResult result, char const* authToken)
+    OMNICLIENT_CALLBACK_NOEXCEPT;
+
+//! This refreshes the auth token for a given URL
+//!
+//! Nucleus auth tokens (as received by @ref omniClientGetServerInfo) expire after some time. If you attempt to connect to an external
+//! service using that auth token, and Nucleus responds with an error indicating that the token is invalid, you may call this function to
+//! refresh the auth token. You will receive a new auth token in the callback (or an error) and all future calls to @ref omniClientGetServerInfo
+//! will also return the new auth token.
+//! 
+//! @note If this function is called after @ref omniClientShutdown, kInvalidRequestId will be returned, and the callback will not be called.
+OMNICLIENT_EXPORT(OmniClientRequestId)
+    omniClientRefreshAuthToken(char const* url, void* userData, OmniClientRefreshAuthTokenCallback callback)
     OMNICLIENT_NOEXCEPT;
 
 //! @}
@@ -732,7 +833,10 @@ typedef enum
     fOmniClientItem_IsChannel = BIT(9),
 
     //! This item is a checkpoint
-    fOmniClientItem_IsCheckpointed = BIT(10)
+    fOmniClientItem_IsCheckpointed = BIT(10),
+
+    //! This item is deleted - never set if the server does not support soft-delete
+    fOmniClientItem_IsDeleted = BIT(11)
 } OmniClientItemFlags;
 
 #undef BIT
@@ -765,29 +869,59 @@ struct OmniClientListEntry
     //! Nanoseconds since the Unix epoch (1 January 1970) of when the file was created
     uint64_t createdTimeNs;
 
-    //! User name of the last person to modify it
-    //! @note Not all providers support this, so it may be null
+    //! User name of the last client to modify it
+    //! @note Not all providers support this, so it may be empty
     const char* modifiedBy;
-    //! User name of the person that created it
-    //! @note Not all providers support this, so it may be null
+    //! User name of the client that created it
+    //! @note Not all providers support this, so it may be empty
     const char* createdBy;
     //! Provider-specific version
     //! @details Might not be an always incrementing number (could be a hash, for example)
-    //! @note Not all providers support this, so it may be null
+    //! @note Not all providers support this, so it may be empty
     const char* version;
     //! Provider specific file hash
-    //! @note Not all providers support this, so it may be null
+    //! @note Not all providers support this, so it may be empty
     const char* hash;
     //! Provider specific comment
     //! @details This will only be set for @ref omniClientListCheckpoints
-    //! @note Not all providers support this, so it may be null
+    //! @note Not all providers support this, so it may be empty
     const char* comment;
+
+    //! Nanoseconds since the Unix epoch (1 January 1970) of when the file was deleted
+    uint64_t deletedTimeNs;
+
+    //! User name of the client that deleted it
+    //! @note Not all providers support this, so it may be empty
+    const char* deletedBy;
+
+    //! User name of the client that has this item locked (null if it's not locked)
+    //! @note Not all providers support this, so it may be empty
+    const char* lockedBy;
 };
 
 //! This is called with the results of @ref omniClientStat or @ref omniClientStatSubscribe
 typedef void
     (OMNICLIENT_ABI* OmniClientStatCallback)(void* userData, OmniClientResult result, struct OmniClientListEntry const* entry)
     OMNICLIENT_CALLBACK_NOEXCEPT;
+
+//! Retrieve information about a single item. This function is equivalent to omniClientStat2 with eOmniClientListIncludeOption_DefaultNotDeleted.
+//! 
+//! This works on both files and folders
+//! The "relativePath" in the entry is blank
+//! 
+//! @note If this function is called after @ref omniClientShutdown, kInvalidRequestId will be returned, and the callback will not be called.
+OMNICLIENT_EXPORT(OmniClientRequestId)
+    omniClientStat(char const* url, void* userData, OmniClientStatCallback callback)
+    OMNICLIENT_NOEXCEPT;
+
+
+//! Stat/List Include Options
+typedef enum
+{
+    eOmniClientListIncludeOption_DefaultNotDeleted, ///< List only files which are not deleted.
+    eOmniClientListIncludeOption_IncludeDeleted, ///< List both files which are deleted and files which are not deleted.
+    eOmniClientListIncludeOption_OnlyDeleted ///< List only files which are deleted.
+} OmniClientListIncludeOption;
 
 //! Retrieve information about a single item
 //! 
@@ -796,7 +930,7 @@ typedef void
 //! 
 //! @note If this function is called after @ref omniClientShutdown, kInvalidRequestId will be returned, and the callback will not be called.
 OMNICLIENT_EXPORT(OmniClientRequestId)
-    omniClientStat(char const* url, void* userData, OmniClientStatCallback callback)
+    omniClientStat2(char const* url, OmniClientListIncludeOption includeOption, void* userData, OmniClientStatCallback callback)
     OMNICLIENT_NOEXCEPT;
 
 //! List Subscribe Event
@@ -809,6 +943,7 @@ typedef enum
     eOmniClientListEvent_Metadata,  //!< An item's metadata was changed
     eOmniClientListEvent_Locked,    //!< A file was locked
     eOmniClientListEvent_Unlocked,  //!< A file was unlocked
+    eOmniClientListEvent_Obliterated,//!< A file was obliterated
 
     Count_eOmniClientListEvent
 } OmniClientListEvent;
@@ -818,11 +953,18 @@ typedef void
     (OMNICLIENT_ABI* OmniClientStatSubscribeCallback)(void* userData, OmniClientResult result, OmniClientListEvent listEvent, struct OmniClientListEntry const* entry)
     OMNICLIENT_CALLBACK_NOEXCEPT;
 
-//! Retrieve information about a single item, and subscribe to future changes.
+//! Retrieve information about a single item, and subscribe to future changes. This function is equivalent to omniClientStatSubscribe2 with eOmniClientListIncludeOption_DefaultNotDeleted.
 //! 
 //! @note If this function is called after @ref omniClientShutdown, kInvalidRequestId will be returned, and the callback will not be called.
 OMNICLIENT_EXPORT(OmniClientRequestId)
     omniClientStatSubscribe(char const* url, void* userData, OmniClientStatCallback callback, OmniClientStatSubscribeCallback subscribeCallback)
+    OMNICLIENT_NOEXCEPT;
+
+//! Retrieve information about a single item, and subscribe to future changes.
+//! 
+//! @note If this function is called after @ref omniClientShutdown, kInvalidRequestId will be returned, and the callback will not be called.
+OMNICLIENT_EXPORT(OmniClientRequestId)
+    omniClientStatSubscribe2(char const* url, OmniClientListIncludeOption includeOption, void* userData, OmniClientStatCallback callback, OmniClientStatSubscribeCallback subscribeCallback)
     OMNICLIENT_NOEXCEPT;
 
 //! @}
@@ -841,33 +983,30 @@ typedef void
 //! The search paths may be a full URL, or a partial URL. If it's a partial URL,
 //! it will be combined with the base URL (set with omniClientPushBaseUrl)
 //! 
-//! For example, given:
-//!   * Base URL: omniverse://sandbox.ov.nvidia.com/project/stage.usd
-//!   * Search Paths:
-//!      1. materials/
-//!      2. /materials/
-//!      3. omniverse://ov-materials/
-//!      4. file:/c:/materials/
-//!   * Relative Path: wood/oak.mdl
+//! For example, given a base URL of `%omniverse://sandbox.ov.nvidia.com/project/stage.usd`
+//! and a relative path of `wood/oak.mdl` with the following search paths:
+//!      1. `materials/`
+//!      2. `/materials/`
+//!      3. `%omniverse://ov-materials/`
+//!      4. `%file:/c:/materials/`
 //! 
 //! This function will search in the following places:
-//!      1. omniverse://sandbox.ov.nvidia.com/project/wood/oak.mdl
-//!      2. omniverse://sandbox.ov.nvidia.com/project/materials/wood/oak.mdl
-//!      3. omniverse://sandbox.ov.nvidia.com/materials/wood/oak.mdl
-//!      4. omniverse://ov-materials/wood/oak.mdl
-//!      5. file:/c:/materials/wood/oak.mdl
+//!      1. `%omniverse://sandbox.ov.nvidia.com/project/wood/oak.mdl`
+//!      2. `%omniverse://sandbox.ov.nvidia.com/project/materials/wood/oak.mdl`
+//!      3. `%omniverse://sandbox.ov.nvidia.com/materials/wood/oak.mdl`
+//!      4. `%omniverse://ov-materials/wood/oak.mdl`
+//!      5. `%file:/c:/materials/wood/oak.mdl`
 //! 
-//!  And given the same search paths and URL, but with a base URL of:
-//!      file:/c:/projects/a/stage.usd
+//!  And given the same search paths and relative path, but with a base URL of `%file:/c:/projects/a/stage.usd`
 //! 
 //!  This function will search in the following places:
-//!      1. file:/c:/projects/a/wood/oak.mdl
-//!      2. file:/c:/projects/a/materials/wood/oak.mdl
-//!      3. file:/c:/materials/wood/oak.mdl
-//!      4. omniverse://ov-materials/wood/oak.mdl
-//!      5. file:/c:/materials/wood/oak.mdl
+//!      1. `%file:/c:/projects/a/wood/oak.mdl`
+//!      2. `%file:/c:/projects/a/materials/wood/oak.mdl`
+//!      3. `%file:/c:/materials/wood/oak.mdl`
+//!      4. `%omniverse://ov-materials/wood/oak.mdl`
+//!      5. `%file:/c:/materials/wood/oak.mdl`
 //! 
-//! If found, "url" will be the FULL URL of the item that was found
+//! If found, the "url" passed to the callback will be the FULL URL of the item that was found.
 //! 
 //! @note If this function is called after @ref omniClientShutdown, kInvalidRequestId will be returned, and the callback will not be called.
 OMNICLIENT_EXPORT(OmniClientRequestId)
@@ -949,17 +1088,34 @@ typedef void
     (OMNICLIENT_ABI* OmniClientListCallback)(void* userData, OmniClientResult result, uint32_t numEntries, struct OmniClientListEntry const* entries)
     OMNICLIENT_CALLBACK_NOEXCEPT;
 
-//! Retrieve contents of a folder
+//! Retrieve contents of a folder. This function is equivalent to omniClientList2 with eOmniClientListIncludeOption_DefaultNotDeleted.
 //! 
 //! @note If this function is called after @ref omniClientShutdown, kInvalidRequestId will be returned, and the callback will not be called.
 OMNICLIENT_EXPORT(OmniClientRequestId)
     omniClientList(char const* url, void* userData, OmniClientListCallback callback)
     OMNICLIENT_NOEXCEPT;
 
+//! Retrieve contents of a folder
+//! 
+//! @note If this function is called after @ref omniClientShutdown, kInvalidRequestId will be returned, and the callback will not be called.
+OMNICLIENT_EXPORT(OmniClientRequestId)
+    omniClientList2(char const* url, OmniClientListIncludeOption includeOption, void* userData, OmniClientListCallback callback)
+    OMNICLIENT_NOEXCEPT;
+
 //! This is called any time an item you've subscribed to with @ref omniClientListSubscribe changes.
 typedef void
     (OMNICLIENT_ABI* OmniClientListSubscribeCallback)(void* userData, OmniClientResult result, OmniClientListEvent listEvent, struct OmniClientListEntry const* entry)
     OMNICLIENT_CALLBACK_NOEXCEPT;
+
+//! Subscribe to change notifications for a url. This function is equivalent to omniClientListSubscribe2 with eOmniClientListIncludeOption_DefaultNotDeleted.
+//! 
+//! 'callback' is called once with the initial list
+//! then 'subscribeCallback' may be called multiple times after that as items change
+//! 
+//! @note If this function is called after @ref omniClientShutdown, kInvalidRequestId will be returned, and the callback will not be called.
+OMNICLIENT_EXPORT(OmniClientRequestId)
+    omniClientListSubscribe(char const* url, void* userData, OmniClientListCallback callback, OmniClientListSubscribeCallback subscribeCallback)
+    OMNICLIENT_NOEXCEPT;
 
 //! Subscribe to change notifications for a url
 //! 
@@ -968,7 +1124,17 @@ typedef void
 //! 
 //! @note If this function is called after @ref omniClientShutdown, kInvalidRequestId will be returned, and the callback will not be called.
 OMNICLIENT_EXPORT(OmniClientRequestId)
-    omniClientListSubscribe(char const* url, void* userData, OmniClientListCallback callback, OmniClientListSubscribeCallback subscribeCallback)
+    omniClientListSubscribe2(char const* url, OmniClientListIncludeOption includeOption, void* userData, OmniClientListCallback callback, OmniClientListSubscribeCallback subscribeCallback)
+    OMNICLIENT_NOEXCEPT;
+
+//! Bypass the internal cache for list requests
+//!
+//! Typically any time a folder is listed, or any time an item in a folder is stat'd, we establish a subscription to keep our cache up-to-date
+//! If you are going to be performing a lot of lists on many different folders, these subscriptions can add up. If you are not listing the same
+//! folders over and over again, the cache can end up doing more harm than good. In this case, you can call this function with (true) and future
+//! list requests will go directly to the server, bypassing the cache.
+OMNICLIENT_EXPORT(void)
+    omniClientBypassListCache(bool bypass)
     OMNICLIENT_NOEXCEPT;
 
 //! @}
@@ -991,6 +1157,47 @@ OMNICLIENT_EXPORT(OmniClientRequestId)
     OMNICLIENT_NOEXCEPT;
 
 //! @}
+
+
+//! @defgroup undelete Undelete
+//! @{
+
+//! This is called with the result of @ref omniClientUndelete
+typedef void
+    (OMNICLIENT_ABI* OmniClientUndeleteCallback)(void* userData, OmniClientResult result)
+    OMNICLIENT_CALLBACK_NOEXCEPT;
+
+//! Restore a path
+//!
+//! 
+//! @note If this function is called after @ref omniClientShutdown, kInvalidRequestId will be returned, and the callback will not be called.
+OMNICLIENT_EXPORT(OmniClientRequestId)
+    omniClientUndelete(char const* url, void* userData, OmniClientUndeleteCallback callback)
+    OMNICLIENT_NOEXCEPT;
+
+//! @}
+
+//! @defgroup obliterate Obliterate
+//! @{
+
+//! This is called with the result of @ref omniClientObliterate
+typedef void
+    (OMNICLIENT_ABI* OmniClientObliterateCallback)(void* userData, OmniClientResult result)
+    OMNICLIENT_CALLBACK_NOEXCEPT;
+
+//! Obliterate a path
+//!
+//! Doesn't support recursive removal, doesn't support wildcards
+//! Supports branches / checkpoints
+//! Only empty folders can be obliterated
+//! 
+//! @note If this function is called after @ref omniClientShutdown, kInvalidRequestId will be returned, and the callback will not be called.
+OMNICLIENT_EXPORT(OmniClientRequestId)
+    omniClientObliterate(char const* url, bool obliterateCheckpoints, void* userData, OmniClientObliterateCallback callback)
+    OMNICLIENT_NOEXCEPT;
+
+//! @}
+
 
 //! @defgroup copy Copy
 //! @{
@@ -1097,13 +1304,40 @@ typedef void
 //! This function takes ownership of the content buffer, and frees it when it's finished with it
 //! (which may be some time in the future)
 //! 
-//! The message parameter is applied to the atomic checkpoint created after writing the file.
+//! @param message is applied to the atomic checkpoint created after writing the file.
 //! 
 //! FIXME: Support streaming writes
 //! 
 //! @note If this function is called after @ref omniClientShutdown, kInvalidRequestId will be returned, and the callback will not be called.
 OMNICLIENT_EXPORT(OmniClientRequestId)
     omniClientWriteFile(char const* url, struct OmniClientContent* content, void* userData, OmniClientWriteFileCallback callback, const char* message OMNICLIENT_DEFAULT(nullptr))
+    OMNICLIENT_NOEXCEPT;
+
+//! This holds extra info provided by omniClientWriteFileEx
+struct OmniClientWriteFileExInfo
+{
+    char const * version; //!< If the provider supports versioning, this is the version of the file that was just written, otherwise blank.
+    char const * hash; //!< If the provider supports hashing, this is the hash of the file that was just written, otherwise blank.
+};
+
+//! This is called with the result of @ref omniClientWriteFileEx
+typedef void
+    (OMNICLIENT_ABI* OmniClientWriteFileExCallback)(void* userData, OmniClientResult result, struct OmniClientWriteFileExInfo const * info)
+    OMNICLIENT_CALLBACK_NOEXCEPT;
+
+//! Create a new file, overwriting if it already exists
+//! 
+//! This function takes ownership of the content buffer, and frees it when it's finished with it
+//! (which may be some time in the future). This is the same as @ref omniClientWriteFile except
+//! that it also provides extra information about the file that was written.
+//! 
+//! @param message is applied to the atomic checkpoint created after writing the file.
+//! 
+//! FIXME: Support streaming writes
+//! 
+//! @note If this function is called after @ref omniClientShutdown, kInvalidRequestId will be returned, and the callback will not be called.
+OMNICLIENT_EXPORT(OmniClientRequestId)
+    omniClientWriteFileEx(char const* url, struct OmniClientContent* content, void* userData, OmniClientWriteFileExCallback callback, const char* message OMNICLIENT_DEFAULT(nullptr))
     OMNICLIENT_NOEXCEPT;
 
 //! This is called with the result of @ref omniClientReadFile
@@ -1134,11 +1368,18 @@ typedef void
 //! Get a local file name for the URL
 //! 
 //! If the URL already points to a local file, it is returned directly
-//! Otherwise, this downloads the file to a local location and return that location
+//! Otherwise, this (optionally) downloads the file to a local location and returns that location
+//!
+//! @param download If this is true, the file is downloaded to the local file location.
+//! False returns where it would have been downloaded to, but doesn't actually download anything.
+//! Note that even with false, the file may exist in the local location if it was previously downloaded.
+//!
+//! Call omniClientStop with the returned request id to mark the file as closed in the Hub cache database.
+//! This allows Hub to garbage collect the file.
 //! 
 //! @note If this function is called after @ref omniClientShutdown, kInvalidRequestId will be returned, and the callback will not be called.
 OMNICLIENT_EXPORT(OmniClientRequestId)
-    omniClientGetLocalFile(char const* url, void* userData, OmniClientGetLocalFileCallback callback)
+    omniClientGetLocalFile(char const* url, bool download, void* userData, OmniClientGetLocalFileCallback callback)
     OMNICLIENT_NOEXCEPT;
 
 //! @}
@@ -1434,11 +1675,38 @@ typedef void
 
 //! Set a function to be called any time there's an update in the queue that needs to be processed
 //! 
-//! When this function is called, you should call omniClientLiveProcess(false) FROM THE MAIN THREAD.
-//! DO NOT CALL omniClientLiveProcess(false) FROM THIS CALLBACK!
-//! DO NOT CALL omniClientLiveProcess(false) WHEN SOME OTHER THREAD IS USING THE USD LIBRARY!
+//! DEPRECATED: Use @ref omniClientLiveRegisterQueuedCallback2
 OMNICLIENT_EXPORT(void)
     omniClientLiveSetQueuedCallback(OmniClientLiveQueuedCallback callback)
+    OMNICLIENT_NOEXCEPT;
+
+typedef enum
+{
+    eOmniClientLiveUpdateType_Remote, ///< A remote client sent an update.
+    eOmniClientLiveUpdateType_Local, ///< The server acknowledged a local update.
+    eOmniClientLiveUpdateType_More, ///< Due to Jitter reduction, a queued update may not be processed by `omniClientLiveProcess`. When this happens, the callback is called with this update type indicating that it's now time to process the update.
+    Count_eOmniClientLiveUpdateType
+} OmniClientLiveUpdateType;
+
+//! This is called any time we receive a live update from the network
+//!
+//! @param url is the URL of the live file that is being updated.
+//! @param updateType indicates if this is a remote update or a local update.
+//! @param sequenceNum is the sequence number of this update.
+//! @param serverTime is the server time that the update was sent at.
+typedef void
+    (OMNICLIENT_ABI* OmniClientLiveQueuedCallback2)(void* userData, struct OmniClientUrl const* url, OmniClientLiveUpdateType updateType, uint64_t sequenceNum, uint64_t serverTime)
+    OMNICLIENT_CALLBACK_NOEXCEPT;
+
+//! Register a function to be called any time there's an update in the queue that needs to be processed
+//! 
+//! When this function is called, you should call omniClientLiveProcess() FROM THE MAIN THREAD.
+//! DO NOT CALL omniClientLiveProcess() FROM THIS CALLBACK!
+//! DO NOT CALL omniClientLiveProcess() WHEN SOME OTHER THREAD IS USING THE USD LIBRARY!
+//!
+//! @returns a handle that you can use with @ref omniClientUnregisterCallback
+OMNICLIENT_EXPORT(uint32_t)
+    omniClientLiveRegisterQueuedCallback2(void* userData, OmniClientLiveQueuedCallback2 callback)
     OMNICLIENT_NOEXCEPT;
 
 //! Call this to send live updates to the server and process live updates received from the server.
@@ -1487,8 +1755,6 @@ OMNICLIENT_EXPORT(void)
 //! The default values are 10ms of constant delay, 2x average ping time, and 1 second maximum.
 //!
 //! Pass (0,0,0) to completely disable jitter reduction.
-//!
-//! See also http://omniverse-docs.s3-website-us-east-1.amazonaws.com/usd_resolver/1.4.0/docs/omni-client-live.html#jitter-reduction
 OMNICLIENT_EXPORT(void)
     omniClientLiveConfigureJitterReduction(uint32_t delayConstantMilliseconds, uint32_t delayMultiple, uint32_t delayMaximumMilliseconds)
     OMNICLIENT_NOEXCEPT;
@@ -1503,8 +1769,6 @@ typedef void
 //! Register a callback to be notified that we are about to begin processing live updates
 //! 
 //! Used by omni-usd-resolver.
-//!
-//! See also http://omniverse-docs.s3-website-us-east-1.amazonaws.com/usd_resolver/1.4.0/docs/omni-client-live.html#updating-a-live-layer
 OMNICLIENT_EXPORT(uint32_t)
     omniClientLiveRegisterProcessUpdatesCallback(void* userData, OmniClientLiveProcessUpdatesCallback callback)
     OMNICLIENT_NOEXCEPT;
@@ -1534,10 +1798,13 @@ typedef void
 //! The callback will not be called again after an error result.
 //! 
 //! Used by omni-usd-resolver.
-//! 
-//! See also http://omniverse-docs.s3-website-us-east-1.amazonaws.com/usd_resolver/1.4.0/docs/omni-client-live.html#reading-a-live-layer
 OMNICLIENT_EXPORT(OmniClientRequestId)
     omniClientLiveRead(char const* url, uint64_t haveObjectId, uint64_t haveSequenceNum, void* userData, OmniClientLiveReadCallback callback)
+    OMNICLIENT_NOEXCEPT;
+
+//! This is the same as @ref omniClientLiveRead except you don't need to call omniClientLiveProcess
+OMNICLIENT_EXPORT(OmniClientRequestId)
+    omniClientLiveRead2(char const* url, uint64_t haveObjectId, uint64_t haveSequenceNum, void* userData, OmniClientLiveReadCallback callback)
     OMNICLIENT_NOEXCEPT;
 
 //! Called with the result of @ref omniClientLiveCreate
@@ -1548,8 +1815,6 @@ typedef void
 //! Create a live object
 //! 
 //! Used by omni-usd-resolver.
-//! 
-//! See also http://omniverse-docs.s3-website-us-east-1.amazonaws.com/usd_resolver/1.4.0/docs/omni-client-live.html#creating-a-live-layer
 OMNICLIENT_EXPORT(OmniClientRequestId)
     omniClientLiveCreate(char const* url, struct OmniClientContent* content, void* userData, OmniClientLiveCreateCallback callback)
     OMNICLIENT_NOEXCEPT;
@@ -1562,11 +1827,14 @@ typedef void
 //! Update a live object
 //! 
 //! Used by omni-usd-resolver.
-//! 
-//! See also http://omniverse-docs.s3-website-us-east-1.amazonaws.com/usd_resolver/1.4.0/docs/omni-client-live.html#updating-a-live-layer
 OMNICLIENT_EXPORT(OmniClientRequestId)
     omniClientLiveUpdate(char const* url, uint64_t objectId, struct OmniClientContent* content, void* userData, OmniClientLiveUpdateCallback callback)
     OMNICLIENT_NOEXCEPT;
+
+//! This is the same as @ref omniClientLiveUpdate except you don't need to call omniClientLiveProcess
+OMNICLIENT_EXPORT(OmniClientRequestId)
+omniClientLiveUpdate2(
+    char const* url, uint64_t objectId, struct OmniClientContent* content, void* userData, OmniClientLiveUpdateCallback callback) OMNICLIENT_NOEXCEPT;
 
 //! @}
 
@@ -1589,3 +1857,137 @@ OMNICLIENT_EXPORT(OmniClientResult)
     OMNICLIENT_NOEXCEPT;
 
 //! @}
+
+//! @defgroup Cache Bypass Status Callbacks
+//! @{
+
+//! Cache Bypass Status
+//! If enabled, the cache is being bypassed to workaround misbehaving cache
+typedef enum
+{
+    eOmniClientCacheBypassStatus_Enabled,  ///< Omniverse Cache is being actively bypassed
+    eOmniClientCacheBypassStatus_Disabled, ///< Omniverse Cache is not being bypassed
+    Count_eOmniClientCacheBypassStatus,
+} OmniClientCacheBypassStatus;
+
+//! This is called any time any cache status changes
+typedef void
+    (OMNICLIENT_ABI* OmniClientCacheBypassStatusCallback)(void* userData, OmniClientCacheBypassStatus status)
+    OMNICLIENT_CALLBACK_NOEXCEPT;
+
+//! Register a callback to receive cache bypass status updates.
+//!
+//! @returns a handle that you can use with @ref omniClientUnregisterCallback
+OMNICLIENT_EXPORT(uint32_t)
+    omniClientRegisterCacheBypassStatusCallback(void* userData, OmniClientCacheBypassStatusCallback callback)
+    OMNICLIENT_NOEXCEPT;
+
+//! Retrieve a human readable string for a cache bypass status.
+OMNICLIENT_EXPORT(char const*)
+    omniClientGetCacheBypassStatusString(OmniClientCacheBypassStatus status)
+    OMNICLIENT_NOEXCEPT;
+
+//! Set the cache bypass status. The function will not call the callback registered with omniClientRegisterCacheBypassStatusCallback.
+OMNICLIENT_EXPORT(OmniClientCacheBypassStatus)
+    omniClientSetCacheBypassStatus(OmniClientCacheBypassStatus status)
+    OMNICLIENT_NOEXCEPT;
+
+//! @}
+
+//! @defgroup Config Config
+//! @{
+
+//! This is an internal function intended for unit tests
+OMNICLIENT_EXPORT(void)
+    omniClientConfigReload()
+    OMNICLIENT_NOEXCEPT;
+
+//! This is an internal function intended for unit tests
+OMNICLIENT_EXPORT(char const*)
+    omniClientConfigGetString(char const* key)
+    OMNICLIENT_NOEXCEPT;
+
+//! This is an internal function intended for unit tests
+OMNICLIENT_EXPORT(void)
+    omniClientConfigFreeString(char const* str)
+    OMNICLIENT_NOEXCEPT;
+
+//! This is an internal function intended for unit tests
+OMNICLIENT_EXPORT(void)
+    omniClientConfigSetInt(char const* key, int64_t value)
+    OMNICLIENT_NOEXCEPT;
+
+//! @}
+
+//! @defgroup OmniHub OmniHub generic interface
+//! @{
+
+//! Called with the result of @ref omniClientGetOmniHubVersion.
+typedef void
+    (OMNICLIENT_ABI* OmniClientGetOmniHubVersionCallback)(void * userData, OmniClientResult result, char const* version)
+    OMNICLIENT_CALLBACK_NOEXCEPT;
+
+//! Check the version of the OmniHub. 
+OMNICLIENT_EXPORT(OmniClientRequestId)
+    omniClientGetOmniHubVersion(void * userData, OmniClientGetOmniHubVersionCallback callback)
+    OMNICLIENT_NOEXCEPT;
+
+//! @}
+
+
+//! @defgroup KvCache OmniHub KvCache
+//! @{
+
+//! Called with the result of @ref omniClientKvCacheSet
+typedef void (OMNICLIENT_ABI* OmniClientKvCacheSetCallback)(void * userData, OmniClientResult result) OMNICLIENT_CALLBACK_NOEXCEPT;
+
+//! Store a value/content in the KvCache using a context/key pair as address
+//! Still experimental, interface might change 
+//! 
+//! @param context an arbitrary string 
+//! @param key identifier for the content, must be unique for content within the same context
+//! @param content @ref OmniClientContent struct to point to the data to be stored. Can be created via @ref omniClientReferenceContent to point at an existing memory block
+//! @param userData will be handed back to the callback
+//! @param callback will be called once with either eOmniClientResult_Ok or an error code
+//! 
+//! Both the context and the key can be arbitrary values.
+OMNICLIENT_EXPORT(OmniClientRequestId)
+    omniClientKvCacheSet(char const* context, char const* key, struct OmniClientContent* content, void * userData, OmniClientKvCacheSetCallback callback) OMNICLIENT_NOEXCEPT;
+
+//! Called with the result of @ref omniClientKvCacheGet.
+//! result will be eOmniClientResult_Ok if content is a valid pointer, and eOmniClientResult_ErrorNotFound if the key doesn't exist.
+//! Other error codes indicate connection errors to OmniHub.
+//! The content's memory can be acquired by @ref omniClientMoveContent or copied out, as the library will free the memory once the callback returns if it is not moved
+typedef void (OMNICLIENT_ABI* OmniClientKvCacheGetCallback)(void * userData, OmniClientResult result, struct OmniClientContent* content) OMNICLIENT_CALLBACK_NOEXCEPT;
+
+//! Retrieve a value/content from the KvCache which has been stored before by @ref omniClientKvCacheSet
+//! Still experimental, interface might change 
+//! 
+//! @param context an arbitrary string 
+//! @param key identifier for the content, must be unique for content within the same context
+//! @param userData will be handed back to the callback
+//! @param callback will be called once with either eOmniClientResult_Ok or an error code
+//! 
+OMNICLIENT_EXPORT(OmniClientRequestId)
+    omniClientKvCacheGet(char const* context, char const* key, void * userData, OmniClientKvCacheGetCallback callback) OMNICLIENT_NOEXCEPT;
+
+//! Called with the result of @ref omniClientKvCacheStat
+//! @param result will be eOmniClientResult_Ok if request has been processed correctly by OmniHub, an error code in other cases
+//! @param exists indicates the if key is valid in the KV cache
+//! @param size will be 0, unless reportSize had been true and the content found in the cache with a valid size.
+typedef void (OMNICLIENT_ABI* OmniClientKvCacheStatCallback)(void *userData, OmniClientResult result, bool exists, uint64_t size) OMNICLIENT_CALLBACK_NOEXCEPT;
+
+//! Check if a key exists in the KV cache, and optionally determine the size of the data. See @ref omniClientKvCacheSet 
+//! Still experimental, interface might change 
+//! 
+//! @param context an arbitrary string 
+//! @param key identifier for the content, must be unique for content within the same context
+//! @param reportSize instructs to additionally report the size of the data if found
+//! @param userData will be handed back to the callback
+//! @param callback will be called once with either eOmniClientResult_Ok or an error code
+//! 
+OMNICLIENT_EXPORT(OmniClientRequestId) omniClientKvCacheStat(
+    char const* context, const char* key, bool reportSize, void* userData, OmniClientKvCacheStatCallback callback) OMNICLIENT_NOEXCEPT;
+
+//! @}
+

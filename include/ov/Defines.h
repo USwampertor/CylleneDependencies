@@ -43,11 +43,15 @@
 #ifdef __cplusplus
 #    if __cplusplus >= 201703L
 #        define OMNIUSDRESOLVER_NOEXCEPT noexcept
+#        define OMNIUSDRESOLVER_CALLBACK_NOEXCEPT noexcept
 #    elif __cplusplus >= 201103L || _MSC_VER >= 1900
 #        define OMNIUSDRESOLVER_NOEXCEPT noexcept
+#        define OMNIUSDRESOLVER_CALLBACK_NOEXCEPT
 #    else
 #        define OMNIUSDRESOLVER_NOEXCEPT throw()
+#        define OMNIUSDRESOLVER_CALLBACK_NOEXCEPT
 #    endif
 #else
 #    define OMNIUSDRESOLVER_NOEXCEPT
+#    define OMNIUSDRESOLVER_CALLBACK_NOEXCEPT
 #endif

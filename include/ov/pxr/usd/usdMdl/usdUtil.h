@@ -2,7 +2,6 @@
  * Copyright 2019 NVIDIA Corporation. All rights reserved.
  *****************************************************************************/
 #pragma once
-#include <pxr/imaging/hd/material.h>
 #include <pxr/usd/usdShade/material.h>
 #include <pxr/usd/plugin/usdMdl/api.h>
 #include <string>
@@ -26,6 +25,6 @@ PXR_NAMESPACE_OPEN_SCOPE
 /// -6: Can not create material instance
 /// -7: Can not get material instance
 ///
-USDMDL_API int UsdShadeMaterialToMdl(const UsdShadeMaterial & usdMaterial, const char * mdlMaterialInstanceName);
+USDMDLAPI_API int UsdShadeMaterialToMdl(const UsdShadeMaterial & usdMaterial, const char * mdlMaterialInstanceName);
 
 PXR_NAMESPACE_CLOSE_SCOPE

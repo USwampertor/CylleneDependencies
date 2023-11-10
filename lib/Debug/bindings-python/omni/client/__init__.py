@@ -1,22 +1,40 @@
 # fmt: off
+import asyncio
+import concurrent.futures
 import os
 import platform
 import sys
-import asyncio
-import concurrent.futures
-from typing import Tuple, List, Callable
+from typing import Callable, List, Tuple
 
+scriptdir = os.path.dirname(os.path.realpath(__file__))
+dlldir = os.path.abspath(os.path.join(scriptdir, "../../.."))
 if hasattr(os, "add_dll_directory"):
-    scriptdir = os.path.dirname(os.path.realpath(__file__))
-    dlldir = os.path.abspath(os.path.join(scriptdir, "../../.."))
+    # From Python 3.8 onwards we have add_dll_directory on Windows
     with os.add_dll_directory(dlldir):
         from ._omniclient import *
 else:
-    from ._omniclient import *
+    # If we are on Windows, we also are on Python 3.7 which does need to modify the os PATH environment
+    if os.name == 'nt':
+        try:
+            old_path = os.environ["PATH"]
+            os.environ["PATH"] += os.pathsep + dlldir
+            from ._omniclient import *
+        finally:
+            os.environ["PATH"] = old_path
+    else:
+        from ._omniclient import *
+
+AUTH_ABORT = True
+
+def set_hang_detection_time_ms(ms):
+    """Deprecated. Do not use."""
+    pass
 
 
 def get_server_info(url: str) -> Tuple[Result, ServerInfo]:
-    """Deprecated: Use :py:func:`omni.client.get_server_info_async` or :py:func:`omni.client.get_server_info_with_callback` instead.
+    """Get Server Info and wait for the result.
+
+    See: :py:func:`omni.client.get_server_info_with_callback`
     """
 
     ret = None
@@ -47,8 +65,44 @@ async def get_server_info_async(url: str) -> Tuple[Result, ServerInfo]:
     return await asyncio.wrap_future(f)
 
 
-def list(url: str) -> Tuple[Result, Tuple[ListEntry]]:
-    """Deprecated: Use :py:func:`omni.client.list_async` or :py:func:`omni.client.list_with_callback` instead.
+def refresh_auth_token(url: str) -> Tuple[Result, str]:
+    """Refresh Auth Token and wait for the result.
+
+    See: :py:func:`omni.client.refresh_auth_token_with_callback`
+    """
+
+    ret = None
+
+    def refresh_auth_token_cb(result, auth_token):
+        nonlocal ret
+        ret = (result, auth_token)
+
+    refresh_auth_token_with_callback(url=url, callback=refresh_auth_token_cb).wait()
+
+    return ret
+
+
+async def refresh_auth_token_async(url: str) -> Tuple[Result, str]:
+    """Asynchronously Refresh Auth Token
+
+    See: :py:func:`omni.client.refresh_auth_token_with_callback`
+    """
+
+    f = concurrent.futures.Future()
+
+    def refresh_auth_token_cb(result, auth_token):
+        if not f.done():
+            f.set_result((result, auth_token))
+
+    refresh_auth_token_with_callback(url=url, callback=refresh_auth_token_cb)
+
+    return await asyncio.wrap_future(f)
+
+
+def list(url: str, include_deleted_option: ListIncludeOption = ListIncludeOption.NO_DELETED_FILES) -> Tuple[Result, Tuple[ListEntry]]:
+    """List contents of a folder and wait for the result.
+
+    See: :py:func:`omni.client.list_with_callback`
     """
 
     ret = None
@@ -57,12 +111,12 @@ def list(url: str) -> Tuple[Result, Tuple[ListEntry]]:
         nonlocal ret
         ret = (result, entries)
 
-    list_with_callback(url=url, callback=list_cb).wait()
+    list_with_callback(url=url, include_deleted_option=include_deleted_option, callback=list_cb).wait()
 
     return ret
 
 
-async def list_async(url: str) -> Tuple[Result, Tuple[ListEntry]]:
+async def list_async(url: str, include_deleted_option: ListIncludeOption = ListIncludeOption.NO_DELETED_FILES) -> Tuple[Result, Tuple[ListEntry]]:
     """Asynchronously List contents of a folder
 
     See: :py:func:`omni.client.list_with_callback`
@@ -74,13 +128,15 @@ async def list_async(url: str) -> Tuple[Result, Tuple[ListEntry]]:
         if not f.done():
             f.set_result((result, entries))
 
-    list_with_callback(url=url, callback=list_cb)
+    list_with_callback(url=url, include_deleted_option=include_deleted_option, callback=list_cb)
 
     return await asyncio.wrap_future(f)
 
 
-def stat(url: str) -> Tuple[Result, ListEntry]:
-    """Deprecated: Use :py:func:`omni.client.stat_async` or :py:func:`omni.client.stat_with_callback` instead.
+def stat(url: str, include_deleted_option: ListIncludeOption = ListIncludeOption.NO_DELETED_FILES) -> Tuple[Result, ListEntry]:
+    """Retrieve information about a single item and wait for the result.
+
+    See: :py:func:`omni.client.stat_with_callback`
     """
 
     ret = None
@@ -89,12 +145,12 @@ def stat(url: str) -> Tuple[Result, ListEntry]:
         nonlocal ret
         ret = (result, entry)
 
-    stat_with_callback(url=url, callback=stat_cb).wait()
+    stat_with_callback(url=url, include_deleted_option=include_deleted_option, callback=stat_cb).wait()
 
     return ret
 
 
-async def stat_async(url: str) -> Tuple[Result, ListEntry]:
+async def stat_async(url: str, include_deleted_option: ListIncludeOption = ListIncludeOption.NO_DELETED_FILES) -> Tuple[Result, ListEntry]:
     """Asynchronously Retrieve information about a single item
 
     See: :py:func:`omni.client.stat_with_callback`
@@ -106,13 +162,49 @@ async def stat_async(url: str) -> Tuple[Result, ListEntry]:
         if not f.done():
             f.set_result((result, entry))
 
-    stat_with_callback(url=url, callback=stat_cb)
+    stat_with_callback(url=url, include_deleted_option=include_deleted_option, callback=stat_cb)
+
+    return await asyncio.wrap_future(f)
+
+
+def resolve(url: str, search_urls: List[str]) -> Tuple[Result, ListEntry, str]:
+    """Resolves a relative URL against a list of search URLs and wait for the result.
+
+    See: :py:func:`omni.client.resolve_with_callback`
+    """
+
+    ret = None
+
+    def resolve_cb(result, entry, resolved_url):
+        nonlocal ret
+        ret = (result, entry, resolved_url)
+
+    resolve_with_callback(url=url, search_urls=search_urls, callback=resolve_cb).wait()
+
+    return ret
+
+
+async def resolve_async(url: str, search_urls: List[str]) -> Tuple[Result, ListEntry, str]:
+    """Asynchronously Resolves a relative URL against a list of search URLs
+
+    See: :py:func:`omni.client.resolve_with_callback`
+    """
+
+    f = concurrent.futures.Future()
+
+    def resolve_cb(result, entry, resolved_url):
+        if not f.done():
+            f.set_result((result, entry, resolved_url))
+
+    resolve_with_callback(url=url, search_urls=search_urls, callback=resolve_cb)
 
     return await asyncio.wrap_future(f)
 
 
 def delete(url: str) -> Result:
-    """Deprecated: Use :py:func:`omni.client.delete_async` or :py:func:`omni.client.delete_with_callback` instead.
+    """Delete an item and wait for the result.
+
+    See: :py:func:`omni.client.delete_with_callback`
     """
 
     ret = None
@@ -143,8 +235,78 @@ async def delete_async(url: str) -> Result:
     return await asyncio.wrap_future(f)
 
 
+def undelete(url: str) -> Result:
+    """Undelete an item and wait for the result.
+
+    See: :py:func:`omni.client.undelete_with_callback`
+    """
+
+    ret = None
+
+    def undelete_cb(result):
+        nonlocal ret
+        ret = result
+
+    undelete_with_callback(url=url, callback=undelete_cb).wait()
+
+    return ret
+
+
+async def undelete_async(url: str) -> Result:
+    """Asynchronously Undelete an item
+
+    See: :py:func:`omni.client.undelete_with_callback`
+    """
+
+    f = concurrent.futures.Future()
+
+    def undelete_cb(result):
+        if not f.done():
+            f.set_result(result)
+
+    undelete_with_callback(url=url, callback=undelete_cb)
+
+    return await asyncio.wrap_future(f)
+
+
+def obliterate(url: str, obliterate_checkpoints: bool) -> Result:
+    """Obliterate an item and wait for the result.
+
+    See: :py:func:`omni.client.obliterate_with_callback`
+    """
+
+    ret = None
+
+    def obliterate_cb(result):
+        nonlocal ret
+        ret = result
+
+    obliterate_with_callback(url=url, obliterate_checkpoints=obliterate_checkpoints, callback=obliterate_cb).wait()
+
+    return ret
+
+
+async def obliterate_async(url: str, obliterate_checkpoints: bool) -> Result:
+    """Asynchronously Obliterate an item
+
+    See: :py:func:`omni.client.obliterate_with_callback`
+    """
+
+    f = concurrent.futures.Future()
+
+    def obliterate_cb(result):
+        if not f.done():
+            f.set_result(result)
+
+    obliterate_with_callback(url=url, obliterate_checkpoints=obliterate_checkpoints, callback=obliterate_cb)
+
+    return await asyncio.wrap_future(f)
+
+
 def create_folder(url: str) -> Result:
-    """Deprecated: Use :py:func:`omni.client.create_folder_async` or :py:func:`omni.client.create_folder_with_callback` instead.
+    """Create a folder and wait for the result.
+
+    See: :py:func:`omni.client.create_folder_with_callback`
     """
 
     ret = None
@@ -176,7 +338,9 @@ async def create_folder_async(url: str) -> Result:
 
 
 def copy(src_url: str, dst_url: str, behavior: CopyBehavior = CopyBehavior.ERROR_IF_EXISTS, message: str = "") -> Result:
-    """Deprecated: Use :py:func:`omni.client.copy_async` or :py:func:`omni.client.copy_with_callback` instead.
+    """Copy an item from ``src_url`` to ``dst_url`` and wait for the result.
+
+    See: :py:func:`omni.client.copy_with_callback`
     """
 
     ret = None
@@ -208,7 +372,9 @@ async def copy_async(src_url: str, dst_url: str, behavior: CopyBehavior = CopyBe
 
 
 def move(src_url: str, dst_url: str, behavior: CopyBehavior = CopyBehavior.ERROR_IF_EXISTS, message: str = "") -> Tuple[Result, bool]:
-    """Deprecated: Use :py:func:`omni.client.move_async` or :py:func:`omni.client.move_with_callback` instead.
+    """Move an item from ``src_url`` to ``dst_url`` and wait for the result.
+
+    See: :py:func:`omni.client.move_with_callback`
     """
 
     ret = None
@@ -239,8 +405,10 @@ async def move_async(src_url: str, dst_url: str, behavior: CopyBehavior = CopyBe
     return await asyncio.wrap_future(f)
 
 
-def get_local_file(url: str) -> Tuple[Result, str]:
-    """Deprecated: Use :py:func:`omni.client.get_local_file_async` or :py:func:`omni.client.get_local_file_with_callback` instead.
+def get_local_file(url: str, download: bool) -> Tuple[Result, str]:
+    """Get local file path from a URL and wait for the result.
+
+    See: :py:func:`omni.client.get_local_file_with_callback`
     """
 
     ret = None
@@ -249,12 +417,12 @@ def get_local_file(url: str) -> Tuple[Result, str]:
         nonlocal ret
         ret = (result, local_file_path)
 
-    get_local_file_with_callback(url=url, callback=get_local_file_cb).wait()
+    get_local_file_with_callback(url=url, download=download, callback=get_local_file_cb).wait()
 
     return ret
 
 
-async def get_local_file_async(url: str) -> Tuple[Result, str]:
+async def get_local_file_async(url: str, download: bool) -> Tuple[Result, str]:
     """Asynchronously Get local file path from a URL
 
     See: :py:func:`omni.client.get_local_file_with_callback`
@@ -266,13 +434,15 @@ async def get_local_file_async(url: str) -> Tuple[Result, str]:
         if not f.done():
             f.set_result((result, local_file_path))
 
-    get_local_file_with_callback(url=url, callback=get_local_file_cb)
+    get_local_file_with_callback(url=url, download=download, callback=get_local_file_cb)
 
     return await asyncio.wrap_future(f)
 
 
 def read_file(url: str) -> Tuple[Result, str, Content]:
-    """Deprecated: Use :py:func:`omni.client.read_file_async` or :py:func:`omni.client.read_file_with_callback` instead.
+    """Read a file and wait for the result.
+
+    See: :py:func:`omni.client.read_file_with_callback`
     """
 
     ret = None
@@ -304,7 +474,9 @@ async def read_file_async(url: str) -> Tuple[Result, str, Content]:
 
 
 def write_file(url: str, content: bytes, message: str = "") -> Result:
-    """Deprecated: Use :py:func:`omni.client.write_file_async` or :py:func:`omni.client.write_file_with_callback` instead.
+    """Write a file and wait for the result.
+
+    See: :py:func:`omni.client.write_file_with_callback`
     """
 
     ret = None
@@ -335,8 +507,44 @@ async def write_file_async(url: str, content: bytes, message: str = "") -> Resul
     return await asyncio.wrap_future(f)
 
 
+def write_file_ex(url: str, content: bytes, message: str = "") -> Tuple[Result, WriteFileExInfo]:
+    """Write a file (and retrieve extra info) and wait for the result.
+
+    See: :py:func:`omni.client.write_file_ex_with_callback`
+    """
+
+    ret = None
+
+    def write_file_ex_cb(result, extra_info):
+        nonlocal ret
+        ret = (result, extra_info)
+
+    write_file_ex_with_callback(url=url, content=content, message=message, callback=write_file_ex_cb).wait()
+
+    return ret
+
+
+async def write_file_ex_async(url: str, content: bytes, message: str = "") -> Tuple[Result, WriteFileExInfo]:
+    """Asynchronously Write a file (and retrieve extra info)
+
+    See: :py:func:`omni.client.write_file_ex_with_callback`
+    """
+
+    f = concurrent.futures.Future()
+
+    def write_file_ex_cb(result, extra_info):
+        if not f.done():
+            f.set_result((result, extra_info))
+
+    write_file_ex_with_callback(url=url, content=content, message=message, callback=write_file_ex_cb)
+
+    return await asyncio.wrap_future(f)
+
+
 def get_acls(url: str) -> Tuple[Result, List[AclEntry]]:
-    """Deprecated: Use :py:func:`omni.client.get_acls_async` or :py:func:`omni.client.get_acls_with_callback` instead.
+    """Get the ACLs for an item and wait for the result.
+
+    See: :py:func:`omni.client.get_acls_with_callback`
     """
 
     ret = None
@@ -368,7 +576,9 @@ async def get_acls_async(url: str) -> Tuple[Result, List[AclEntry]]:
 
 
 def set_acls(url: str, acls: List[AclEntry]) -> Result:
-    """Deprecated: Use :py:func:`omni.client.set_acls_async` or :py:func:`omni.client.set_acls_with_callback` instead.
+    """Set the ACLs for an item and wait for the result.
+
+    See: :py:func:`omni.client.set_acls_with_callback`
     """
 
     ret = None
@@ -400,7 +610,9 @@ async def set_acls_async(url: str, acls: List[AclEntry]) -> Result:
 
 
 def send_message(join_request_id: int, content: bytes) -> Result:
-    """Deprecated: Use :py:func:`omni.client.send_message_async` or :py:func:`omni.client.send_message_with_callback` instead.
+    """Send a message to a channel and wait for the result.
+
+    See: :py:func:`omni.client.send_message_with_callback`
     """
 
     ret = None
@@ -432,7 +644,9 @@ async def send_message_async(join_request_id: int, content: bytes) -> Result:
 
 
 def list_checkpoints(url: str) -> Tuple[Result, Tuple[ListEntry]]:
-    """Deprecated: Use :py:func:`omni.client.list_checkpoints_async` or :py:func:`omni.client.list_checkpoints_with_callback` instead.
+    """List the checkpoints of an item and wait for the result.
+
+    See: :py:func:`omni.client.list_checkpoints_with_callback`
     """
 
     ret = None
@@ -464,7 +678,9 @@ async def list_checkpoints_async(url: str) -> Tuple[Result, Tuple[ListEntry]]:
 
 
 def create_checkpoint(url: str, comment: str, force: bool = False) -> Tuple[Result, str]:
-    """Deprecated: Use :py:func:`omni.client.create_checkpoint_async` or :py:func:`omni.client.create_checkpoint_with_callback` instead.
+    """Create a checkpoint of an item and wait for the result.
+
+    See: :py:func:`omni.client.create_checkpoint_with_callback`
     """
 
     ret = None
@@ -496,7 +712,9 @@ async def create_checkpoint_async(url: str, comment: str, force: bool = False) -
 
 
 def get_groups(url: str) -> Tuple[Result, List[str]]:
-    """Deprecated: Use :py:func:`omni.client.get_groups_async` or :py:func:`omni.client.get_groups_with_callback` instead.
+    """Get a list of all groups and wait for the result.
+
+    See: :py:func:`omni.client.get_groups_with_callback`
     """
 
     ret = None
@@ -528,7 +746,9 @@ async def get_groups_async(url: str) -> Tuple[Result, List[str]]:
 
 
 def get_group_users(url: str, group: str) -> Tuple[Result, List[str]]:
-    """Deprecated: Use :py:func:`omni.client.get_group_users_async` or :py:func:`omni.client.get_group_users_with_callback` instead.
+    """Get a list of all users in a group and wait for the result.
+
+    See: :py:func:`omni.client.get_group_users_with_callback`
     """
 
     ret = None
@@ -560,7 +780,9 @@ async def get_group_users_async(url: str, group: str) -> Tuple[Result, List[str]
 
 
 def create_group(url: str, group: str) -> Result:
-    """Deprecated: Use :py:func:`omni.client.create_group_async` or :py:func:`omni.client.create_group_with_callback` instead.
+    """Create a group and wait for the result.
+
+    See: :py:func:`omni.client.create_group_with_callback`
     """
 
     ret = None
@@ -592,7 +814,9 @@ async def create_group_async(url: str, group: str) -> Result:
 
 
 def rename_group(url: str, group: str, new_group: str) -> Result:
-    """Deprecated: Use :py:func:`omni.client.rename_group_async` or :py:func:`omni.client.rename_group_with_callback` instead.
+    """Rename a group and wait for the result.
+
+    See: :py:func:`omni.client.rename_group_with_callback`
     """
 
     ret = None
@@ -624,7 +848,9 @@ async def rename_group_async(url: str, group: str, new_group: str) -> Result:
 
 
 def remove_group(url: str, group: str) -> Tuple[Result, int]:
-    """Deprecated: Use :py:func:`omni.client.remove_group_async` or :py:func:`omni.client.remove_group_with_callback` instead.
+    """Remove a group and wait for the result.
+
+    See: :py:func:`omni.client.remove_group_with_callback`
     """
 
     ret = None
@@ -656,7 +882,9 @@ async def remove_group_async(url: str, group: str) -> Tuple[Result, int]:
 
 
 def get_users(url: str) -> Tuple[Result, List[str]]:
-    """Deprecated: Use :py:func:`omni.client.get_users_async` or :py:func:`omni.client.get_users_with_callback` instead.
+    """Get a list of all users and wait for the result.
+
+    See: :py:func:`omni.client.get_users_with_callback`
     """
 
     ret = None
@@ -688,7 +916,9 @@ async def get_users_async(url: str) -> Tuple[Result, List[str]]:
 
 
 def get_user_groups(url: str, user: str) -> Tuple[Result, List[str]]:
-    """Deprecated: Use :py:func:`omni.client.get_user_groups_async` or :py:func:`omni.client.get_user_groups_with_callback` instead.
+    """Get a list of groups the user is in and wait for the result.
+
+    See: :py:func:`omni.client.get_user_groups_with_callback`
     """
 
     ret = None
@@ -720,7 +950,9 @@ async def get_user_groups_async(url: str, user: str) -> Tuple[Result, List[str]]
 
 
 def add_user_to_group(url: str, user: str, group: str) -> Result:
-    """Deprecated: Use :py:func:`omni.client.add_user_to_group_async` or :py:func:`omni.client.add_user_to_group_with_callback` instead.
+    """Add a user to a group and wait for the result.
+
+    See: :py:func:`omni.client.add_user_to_group_with_callback`
     """
 
     ret = None
@@ -752,7 +984,9 @@ async def add_user_to_group_async(url: str, user: str, group: str) -> Result:
 
 
 def remove_user_from_group(url: str, user: str, group: str) -> Result:
-    """Deprecated: Use :py:func:`omni.client.remove_user_from_group_async` or :py:func:`omni.client.remove_user_from_group_with_callback` instead.
+    """Remove a user from a group and wait for the result.
+
+    See: :py:func:`omni.client.remove_user_from_group_with_callback`
     """
 
     ret = None
@@ -779,5 +1013,39 @@ async def remove_user_from_group_async(url: str, user: str, group: str) -> Resul
             f.set_result(result)
 
     remove_user_from_group_with_callback(url=url, user=user, group=group, callback=remove_user_from_group_cb)
+
+    return await asyncio.wrap_future(f)
+
+
+def get_hub_version() -> Tuple[Result, str]:
+    """Get Hub Version and wait for the result.
+
+    See: :py:func:`omni.client.get_hub_version_with_callback`
+    """
+
+    ret = None
+
+    def get_hub_version_cb(result, version):
+        nonlocal ret
+        ret = (result, version)
+
+    get_hub_version_with_callback(callback=get_hub_version_cb).wait()
+
+    return ret
+
+
+async def get_hub_version_async() -> Tuple[Result, str]:
+    """Asynchronously Get Hub Version
+
+    See: :py:func:`omni.client.get_hub_version_with_callback`
+    """
+
+    f = concurrent.futures.Future()
+
+    def get_hub_version_cb(result, version):
+        if not f.done():
+            f.set_result((result, version))
+
+    get_hub_version_with_callback(callback=get_hub_version_cb)
 
     return await asyncio.wrap_future(f)

@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2022, NVIDIA CORPORATION. All rights reserved.
+// Copyright (c) 2020-2023, NVIDIA CORPORATION. All rights reserved.
 //
 // NVIDIA CORPORATION and its licensors retain all intellectual property
 // and proprietary rights in and to this software, related documentation
@@ -14,13 +14,13 @@
 #define OMNICLIENT_VERSION_MAJOR 2
 
 //! Minor version number. This changes with every release.
-#define OMNICLIENT_VERSION_MINOR 13
+#define OMNICLIENT_VERSION_MINOR 32
 
 //! Patch number. This will normally be 0, but can change if a fix is backported to a previous release.
 #define OMNICLIENT_VERSION_PATCH 0
 
 //! This unused, and is always 0.
-#define OMNICLIENT_VERSION_BUILD 3086
+#define OMNICLIENT_VERSION_BUILD 4682
 
 //! This is the full build string that is also returned by @ref omniClientGetVersionString
-#define OMNICLIENT_BUILD_STRING "2.13.0-main.3086+tc.8c492f80"
+#define OMNICLIENT_BUILD_STRING "2.32.0-release.4682+tc.9a1808da"

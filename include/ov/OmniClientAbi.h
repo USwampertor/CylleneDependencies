@@ -25,8 +25,10 @@
 #ifdef OMNICLIENT_EXPORTS
 #    if defined(_WIN32)
 #        define OMNICLIENT_EXPORT_CPP __declspec(dllexport)
-#    elif defined(__linux__)
+#    elif defined(__linux__) || defined(__APPLE__)
 #        define OMNICLIENT_EXPORT_CPP __attribute__((visibility("default")))
+#    else
+static_assert(false, "unsupported platform!");
 #    endif
 #    define OMNICLIENT_EXPORT(ReturnType) OMNICLIENT_EXPORT_C OMNICLIENT_EXPORT_CPP ReturnType OMNICLIENT_ABI
 #else

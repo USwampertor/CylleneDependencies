@@ -1,0 +1,736 @@
+<?xml version="1.0" encoding="utf-8"?>
+<AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
+
+    <!-- Carbonite opaque types -->
+    <!-- see https://docs.microsoft.com/en-us/visualstudio/debugger/create-custom-views-of-native-objects -->
+    <!-- see https://docs.microsoft.com/en-us/visualstudio/debugger/format-specifiers-in-cpp -->
+    <Type Name="carb::audio::Context">
+        <Expand>
+            <ExpandedItem>*(carb.audio-forge.plugin.dll!carb::audio::playback::ContextImpl*)this,!</ExpandedItem>
+        </Expand>
+    </Type>
+    <Type Name="carb::audio::SoundData">
+        <Expand>
+            <ExpandedItem>*(carb.audio-forge.plugin.dll!carb::audio::data::SoundDataImpl*)this,!</ExpandedItem>
+        </Expand>
+    </Type>
+    <Type Name="carb::audio::CodecState">
+        <Expand>
+            <ExpandedItem>*(carb.audio-forge.plugin.dll!carb::audio::data::Codec::State*)this,!</ExpandedItem>
+        </Expand>
+    </Type>
+    <Type Name="carb::tasking::Counter">
+        <Intrinsic Name="p" Expression="(carb.tasking.plugin.dll!carb::tasking::Counter*)this" />
+        <DisplayString>{{ Counter count={p()->m_value} target={p()->m_target} }}</DisplayString>
+        <Expand>
+            <Item Name="[id]">p()->m_id</Item>
+            <Item Name="[value]">p()->m_value</Item>
+            <Item Name="[target]">p()->m_target</Item>
+            <Item Name="[notify when value reaches target]">p()->m_notify</Item>
+            <Item Name="[creation backtrace]" Condition="p()->m_debugBacktrace">p()->m_debugBacktrace</Item>
+            <Item Name="[creation backtrace]" Condition="!p()->m_debugBacktrace">"Enable /debugTaskBacktrace setting to capture",sb</Item>
+            <Item Name="[raw]">p(),!</Item>
+        </Expand>
+    </Type>
+    <Type Name="carb::tasking::Mutex">
+        <Intrinsic Name="p" Expression="(carb.tasking.plugin.dll!carb::tasking::Mutex*)this" />
+        <Intrinsic Name="owner" Expression="*(uint64_t*)&amp;p()->m_owner" />
+        <Intrinsic Name="fiberFlag" Expression="uint64_t(1) &lt;&lt; 63" /> <!-- kFiberFlag -->
+        <DisplayString Condition="!owner()">{{ Mutex {{ unlocked }} }}</DisplayString>
+        <DisplayString Condition="!(owner() &amp; fiberFlag())">{{ Mutex {{ locked by thread {owner()} }} }}</DisplayString>
+        <DisplayString>{{ Mutex {{ locked by fiber {owner() &amp; ~fiberFlag()} }} }}</DisplayString>
+        <Expand>
+            <Item Name="[recursive]">p()->m_recursive</Item>
+            <Item Name="[owner thread]" Condition="owner() &amp;&amp; !(owner() &amp; fiberFlag())">owner()</Item>
+            <Item Name="[owner fiber]" Condition="owner() &amp;&amp; !!(owner() &amp; fiberFlag())">owner() &amp; ~fiberFlag()</Item>
+            <Item Name="[depth]" Condition="p()->m_recursive &amp;&amp; !!owner()">p()->m_depth</Item>
+            <Item Name="[creation backtrace]" Condition="!p()->m_debugBacktrace">"Enable /debugTaskBacktrace setting to capture",sb</Item>
+            <Item Name="[creation backtrace]" Condition="p()->m_debugBacktrace">p()->m_debugBacktrace</Item>
+            <Item Name="[raw]">p(),!</Item>
+        </Expand>
+    </Type>
+    <Type Name="carb::tasking::Semaphore">
+        <Intrinsic Name="p" Expression="(carb.tasking.plugin.dll!carb::tasking::Semaphore*)this" />
+        <Intrinsic Name="data" Expression="*(uint64_t*)&amp;p()->m_data" />
+        <Intrinsic Name="waiters" Expression="data() &gt;&gt; 32" />
+        <Intrinsic Name="count" Expression="data() &amp; 0xffffffff" />
+        <DisplayString>{{ Semaphore count={count()} waiters={waiters()} }}</DisplayString>
+        <Expand>
+            <Item Name="[count]">count()</Item>
+            <Item Name="[waiters]">waiters()</Item>
+            <Item Name="[notify when have count]">p()->m_notify</Item>
+            <Item Name="[creation backtrace]" Condition="!p()->m_debugBacktrace">"Enable /debugTaskBacktrace setting to capture",sb</Item>
+            <Item Name="[creation backtrace]" Condition="p()->m_debugBacktrace">p()->m_debugBacktrace</Item>
+            <Item Name="[raw]">p(),!</Item>
+        </Expand>
+    </Type>
+    <Type Name="carb::tasking::SharedMutex">
+        <Intrinsic Name="p" Expression="(carb.tasking.plugin.dll!carb::tasking::SharedMutex*)this" />
+        <Intrinsic Name="count" Expression="*(uint32_t*)&amp;p()->m_count" />
+        <Intrinsic Name="exclusive" Expression="!!(count() &amp; 1)" />
+        <Intrinsic Name="shared" Expression="count() &gt;&gt; 1" />
+        <DisplayString Condition="exclusive()">{{ SharedMutex {{ locked exclusively }} }}</DisplayString>
+        <DisplayString Condition="shared()">{{ SharedMutex {{ shared={shared()} }} }}</DisplayString>
+        <DisplayString>{{ SharedMutex {{ unlocked }} }}</DisplayString>
+        <Expand>
+            <Item Name="[exclusive]">exclusive()</Item>
+            <Item Name="[shared count]">shared()</Item>
+            <Item Name="[creation backtrace]" Condition="!p()->m_debugBacktrace">"Enable /debugTaskBacktrace setting to capture",sb</Item>
+            <Item Name="[creation backtrace]" Condition="p()->m_debugBacktrace">p()->m_debugBacktrace</Item>
+            <Item Name="[raw]">p(),!</Item>
+        </Expand>
+    </Type>
+    <Type Name="carb::tasking::ConditionVariable">
+        <Intrinsic Name="p" Expression="(carb.tasking.plugin.dll!carb::tasking::ConditionVariable*)this" />
+        <DisplayString>{{ ConditionVariable }}</DisplayString>
+        <Expand>
+            <Item Name="[creation backtrace]" Condition="!p()->m_debugBacktrace">"Enable /debugTaskBacktrace setting to capture",sb</Item>
+            <Item Name="[creation backtrace]" Condition="p()->m_debugBacktrace">p()->m_debugBacktrace</Item>
+            <Item Name="[raw]">p(),!</Item>
+        </Expand>
+    </Type>
+
+    <Type Name="carb::tasking::Scheduler">
+        <Intrinsic Name="fiberList" Expression="*(Fiber**)&amp;m_fibers[Index]">
+            <Parameter Name="Index" Type="size_t"/>
+        </Intrinsic>
+        <Intrinsic Name="fiberBuckets" Expression="16" /> <!-- kFiberBuckets -->
+        <DisplayString>{{ Open for carb.tasking Debug Information }}</DisplayString>
+        <Expand>
+            <Item Name="[quit flag]">m_quit</Item>
+            <Item Name="[thread count]">m_threadCount</Item>
+            <Item Name="[emergency thread count]">m_emergencyThreads</Item>
+            <Item Name="[waiting thread count]" Condition="m_debugWaitingTasks">m_waitingThreads</Item>
+            <Item Name="[waiting thread count]" Condition="!m_debugWaitingTasks">"Requires /debugWaitingTasks",sb</Item>
+            <Item Name="[timer state]">m_timerState</Item>
+            <Item Name="[watchdog state]">m_watchdogState</Item>
+            <Item Name="[watchdog check rate]">m_stuckCheckTime</Item>
+            <Item Name="[current thread's task]" Optional="true">(carb::tasking::TaskBundle*)(((ThreadLocalStorage*)(::TlsGetValue(m_tls.m_key)))->currentFiber->m_context)</Item>
+            <Synthetic Name="[applyRange calls]">
+                <DisplayString Condition="!m_rangesHead">{{ empty }}</DisplayString>
+                <DisplayString>{{ open for applyRange calls }}</DisplayString>
+                <Expand>
+                    <CustomListItems>
+                        <Variable Name="p" InitialValue="m_rangesHead"/>
+                        <Loop Condition="p">
+                            <Item>*p</Item>
+                            <Exec>p = p-&gt;next</Exec>
+                        </Loop>
+                    </CustomListItems>
+                </Expand>
+            </Synthetic>
+            <Item Name="[task counts by function]">m_taskCounts</Item>
+            <Item Name="[task database]">m_taskHandleDb</Item>
+            <Synthetic Name="[fiber database]">
+                <DisplayString>{{ fiber database }}</DisplayString>
+                <Expand>
+                    <CustomListItems MaxItemsPerView="100">
+                        <Variable Name="Outer" InitialValue="0"/>
+                        <Variable Name="Max" InitialValue="1"/>
+                        <Variable Name="Inner" InitialValue="0"/>
+                        <Variable Name="List" InitialValue="(Fiber*)0"/>
+                        <Loop Condition="Outer &lt; fiberBuckets()">
+                            <Exec>List = fiberList(Outer)</Exec>
+                            <Break Condition="!List"/>
+                            <Exec>Inner = 0</Exec>
+                            <Loop Condition="Inner &lt; Max">
+                                <Item Name="[{List[Inner].m_fiberId}]">&amp;List[Inner]</Item>
+                                <Exec>Inner++</Exec>
+                            </Loop>
+                            <Exec>Max *= 2</Exec>
+                            <Exec>Outer++</Exec>
+                        </Loop>
+                    </CustomListItems>
+                </Expand>
+            </Synthetic>
+        </Expand>
+    </Type>
+    <Type Name="carb::tasking::Scheduler::RangeData">
+        <DisplayString>{{ range = {range}, fn = {fn} }}</DisplayString>
+        <Expand>
+            <Item Name="[range]">range</Item>
+            <Item Name="[blockSize]">blockSize</Item>
+            <Item Name="[fn]">fn</Item>
+            <Item Name="[context]">context</Item>
+            <Item Name="[not started yet]">range - *(size_t*)&amp;index</Item>
+            <Item Name="[backtrace]" Condition="!backtrace">"Enable /debugTaskBacktrace setting to capture",sb</Item>
+            <Item Name="[backtrace]" Condition="backtrace">backtrace</Item>
+            <Item Name="[participating threads]">refs</Item>
+            <Item Name="[threads may participate]">availableTasks</Item>
+        </Expand>
+    </Type>
+    <Type Name="carb::tasking::NotifyList">
+        <Intrinsic Name="head" Expression="*(INotifyTargetEntry**)&amp;m_head" />
+        <DisplayString Condition="head()">{{ NotifyList {{ not empty }} }}</DisplayString>
+        <DisplayString>{{ NotifyList {{ empty }} }}</DisplayString>
+        <Expand>
+            <CustomListItems>
+                <Variable Name="p" InitialValue="head()" />
+                <Loop Condition="p">
+                    <Item>p</Item>
+                    <Exec>p = p-&gt;next</Exec>
+                </Loop>
+            </CustomListItems>
+        </Expand>
+    </Type>
+    <Type Name="carb::tasking::TaskCountHashTable">
+        <Intrinsic Name="hashTableSize" Expression="512" />
+        <DisplayString>{{ size={m_size} }}</DisplayString>
+        <Expand>
+            <CustomListItems>
+                <Variable Name="iIndex" InitialValue="0"/>
+                <Loop Condition="iIndex &lt; hashTableSize()">
+                    <If Condition="(*(void**)&amp;m_entries[iIndex].task) != 0 &amp;&amp; *(size_t**)&amp;m_entries[iIndex].count != 0">
+                        <Item Name="{m_entries[iIndex].task}">m_entries[iIndex].count</Item>
+                    </If>
+                    <Exec>iIndex++</Exec>
+                </Loop>
+                <If Condition="*(size_t**)&amp;m_dummy.count != 0">
+                    <Item Name="Overflow counts">m_dummy</Item>
+                </If>
+            </CustomListItems>
+        </Expand>
+    </Type>
+
+    <Type Name="carb::tasking::TaskBundle">
+        <Intrinsic Name="flags" Expression="*(uint32_t*)&amp;m_flags" />
+        <Intrinsic Name="name" Expression="(const char*)(size_t(m_name) &amp; 0x7fffffffffffffff)" />
+        <DisplayString Condition="flags() &amp; eFlagTaskWaiting">[waiting] {name(),s} {task}</DisplayString>
+        <DisplayString Condition="flags() &amp; eFlagFinished">[finished/canceled] {name(),s} {task}</DisplayString>
+        <DisplayString Condition="flags() &amp; eFlagStarted">[running] {name(),s} {task}</DisplayString>
+        <DisplayString Condition="flags() &amp; eFlagPrereqsMet">[new] {name(),s} {task}</DisplayString>
+        <DisplayString Optional="1">[pending] {name(),s} {task}</DisplayString>
+        <Expand>
+            <!-- Handle would be good to have, but it's stored as part of the HandleDatabase, not in this structure -->
+            <Item Name="[name]" Condition="name()">name(),s</Item>
+            <Item Name="[name]" Condition="!name()">"Use carb::tasking::ITasking::nameTask() to set a name",sb</Item>
+            <Item Name="[task function]">task</Item>
+            <Item Name="[task argument]">taskArg</Item>
+            <Item Name="[cancellation function]">cancel</Item>
+            <Item Name="[backtrace]" Condition="*(void**)&amp;m_backtrace">m_backtrace</Item>
+            <Item Name="[backtrace]" Condition="!*(void**)&amp;m_backtrace">"Enable /debugTaskBacktrace setting to capture",sb</Item>
+            <Item Name="[task local storage]">(*(Fiber**)&amp;m_fiber)->m_flsSlots</Item>
+            <Synthetic Name="[flags]">
+                <DisplayString>{flags(),x}</DisplayString>
+                <Expand>
+                    <Item Name="[priority]">(carb::tasking::Priority)(flags() &amp; ePriorityMask)</Item>
+                    <Item Name="[reserved]" Condition="flags() &amp; 0x07fffff8">(flags() &amp; 0x07fffff8),x</Item>
+                    <Item Name="eFlagPinned">!!(flags() &amp; eFlagPinned) ? 1 : 0</Item>
+                    <Item Name="eFlagTaskWaiting">!!(flags() &amp; eFlagTaskWaiting) ? 1 : 0</Item>
+                    <Item Name="eFlagPrereqsMet">!!(flags() &amp; eFlagPrereqsMet) ? 1 : 0</Item>
+                    <Item Name="eFlagFinished">!!(flags() &amp; eFlagFinished) ? 1 : 0</Item>
+                    <Item Name="eFlagStarted">!!(flags() &amp; eFlagStarted) ? 1 : 0</Item>
+                </Expand>
+            </Synthetic>
+            <Item Name="[prerequisite]">m_prerequisite</Item>
+            <Item Name="[notify on complete]">m_notifyTarget</Item>
+            <Item Name="[fiber]">*(Fiber**)&amp;m_fiber</Item>
+        </Expand>
+    </Type>
+    <Type Name="carb::tasking::Fiber">
+        <Intrinsic Name="flags" Expression="*(uint32_t*)&amp;m_flags" />
+        <Expand>
+            <Item Name="[fiber id]">m_fiberId</Item>
+            <Synthetic Name="[flags]">
+                <DisplayString>{flags(),x}</DisplayString>
+                <Expand>
+                    <Item Name="[state]">(carb::tasking::FiberFlags)(flags() &amp; eStateMask)</Item>
+                    <Item Name="[reserved]" Condition="flags() &amp; 0x01fffffc">(flags() &amp; 0x01fffffc),x</Item>
+                    <Item Name="eFlagThreadFiber">!!(flags() &amp; eFlagThreadFiber) ? 1 : 0</Item>
+                    <Item Name="eFlagReady">!!(flags() &amp; eFlagReady) ? 1 : 0</Item>
+                    <Item Name="eFlagWaiting">!!(flags() &amp; eFlagWaiting) ? 1 : 0</Item>
+                    <Item Name="eFlagNoWake">!!(flags() &amp; eFlagNoWake) ? 1 : 0</Item>
+                    <Item Name="eFlagWoken">!!(flags() &amp; eFlagWoken) ? 1 : 0</Item>
+                    <Item Name="eFlagMaybeWaiting">!!(flags() &amp; eFlagMaybeWaiting) ? 1 : 0</Item>
+                    <Item Name="eFlagOnThread">!!(flags() &amp; eFlagOnThread) ? 1 : 0</Item>
+                </Expand>
+            </Synthetic>
+            <Item Name="[task]">*(carb::tasking::TaskBundle*)m_context</Item>
+            <Item Name="[fls slots]">m_flsSlots</Item>
+        </Expand>
+    </Type>
+    <Type Name="carb::tasking::TaskBundle::TaskBacktrace">
+        <Expand>
+            <Synthetic Name="[waiting]" Condition="!!waitingSize">
+                <DisplayString>{{ size = {waitingSize} }}</DisplayString>
+                <Expand>
+                    <ArrayItems>
+                        <Size>waitingSize</Size>
+                        <ValuePointer>waiting</ValuePointer>
+                    </ArrayItems>
+                </Expand>
+            </Synthetic>
+            <Item Name="[creation]">(carb::tasking::Backtrace*)this</Item>
+        </Expand>
+    </Type>
+    <Type Name="carb::tasking::Backtrace">
+        <DisplayString>{{ size = {m_size} }}</DisplayString>
+        <Expand>
+            <ArrayItems>
+                <Size>m_size</Size>
+                <ValuePointer>m_stack</ValuePointer>
+            </ArrayItems>
+        </Expand>
+    </Type>
+    <Type Name="carb::tasking::FinishTracking">
+        <DisplayString>{{ FinishTracking count={m_count} }}</DisplayString>
+        <Expand>
+            <ArrayItems>
+                <Size>m_count</Size>
+                <ValuePointer>m_obj</ValuePointer>
+            </ArrayItems>
+        </Expand>
+    </Type>
+    <Type Name="carb::tasking::TrackerBinding">
+        <DisplayString>{{ TrackerBinding count={m_count} }}</DisplayString>
+        <Expand>
+            <Item Name="[tracking]">m_required</Item>
+            <Synthetic Name="[trackers]">
+                <DisplayString>{{ count={m_count} }}</DisplayString>
+                <Expand>
+                    <ArrayItems>
+                        <Size>m_count</Size>
+                        <ValuePointer>m_tracker</ValuePointer>
+                    </ArrayItems>
+                </Expand>
+            </Synthetic>
+        </Expand>
+    </Type>
+
+    <Type Name="carb::tasking::Scheduler::NotifyAfterObject">
+        <DisplayString>{{ NotifyAfterObject }}</DisplayString>
+        <Expand>
+            <Item Name="[required object]" Condition="m_object.m_vtable != &amp;InternalObject::NullVTable">m_object</Item>
+            <Item Name="[required semaphore]" Condition="m_sema">m_sema</Item>
+            <Item Name="[task to notify]">m_task</Item>
+        </Expand>
+    </Type>
+    <Type Name="carb::tasking::TimerAddTask">
+        <DisplayString>{{ TimerAddTask }}</DisplayString>
+        <Expand>
+            <Item Name="[when]">m_when</Item>
+            <Item Name="[task to add]">m_task</Item>
+        </Expand>
+    </Type>
+
+    <Type Name="carb::tasking::InternalObject">
+        <Intrinsic Name="isNull" Expression="m_vtable == &amp;NullVTable" />
+        <Intrinsic Name="isCounter" Expression="m_vtable == &amp;CounterVTable" />
+        <Intrinsic Name="isTaskGroup" Expression="m_vtable == &amp;TaskGroupVTable" />
+        <Intrinsic Name="isTask" Expression="m_vtable == &amp;TaskVTable" />
+        <Intrinsic Name="isTaskPtr" Expression="m_vtable == &amp;TaskPtrVTable" />
+        <Intrinsic Name="isFinishedTask" Expression="m_vtable == &amp;FinishedTaskVTable" />
+        <Intrinsic Name="isFutex1" Expression="m_vtable == &amp;Futex1VTable" />
+        <Intrinsic Name="isFutex2" Expression="m_vtable == &amp;Futex2VTable" />
+        <Intrinsic Name="isFutex4" Expression="m_vtable == &amp;Futex4VTable" />
+        <Intrinsic Name="isFutex8" Expression="m_vtable == &amp;Futex8VTable" />
+        <Intrinsic Name="isSema" Expression="m_vtable == &amp;SemaphoreVTable" />
+        <Intrinsic Name="isName" Expression="m_vtable == &amp;NameVTable || m_vtable == &amp;NameLiteralVTable" />
+        <DisplayString Condition="isNull()">{{ null }}</DisplayString>
+        <DisplayString Condition="isCounter()">{{ Counter={m_counter} }}</DisplayString>
+        <DisplayString Condition="isTaskGroup()">{{ TaskGroup={(carb::tasking::TaskGroup*)m_tg} }}</DisplayString>
+        <DisplayString Condition="isTask()">{{ Task={m_tb} }}</DisplayString>
+        <DisplayString Condition="isTaskPtr()">{{ TaskContext*={m_pctx} }}</DisplayString>
+        <DisplayString Condition="isFinishedTask()">{{ Finished TaskContext={m_ctx} }}</DisplayString>
+        <DisplayString Condition="isFutex1()">{{ Futex={m_au8} }}</DisplayString>
+        <DisplayString Condition="isFutex2()">{{ Futex={m_au16} }}</DisplayString>
+        <DisplayString Condition="isFutex4()">{{ Futex={m_au32} }}</DisplayString>
+        <DisplayString Condition="isFutex8()">{{ Futex={m_au64} }}</DisplayString>
+        <DisplayString Condition="isSema()">{{ Semaphore={m_sema} }}</DisplayString>
+        <DisplayString Condition="isName()">{{ Name={m_name} }}</DisplayString>
+        <DisplayString>{{ invalid }}</DisplayString>
+        <Expand>
+            <Item Name="[Counter]" Condition="isCounter()">m_counter</Item>
+            <Item Name="[TaskGroup]" Condition="isTaskGroup()">(carb::tasking::TaskGroup*)m_tg</Item>
+            <Item Name="[Task]" Condition="isTask()">m_tb</Item>
+            <Item Name="[TaskContext*]" Condition="isTaskPtr()">m_pctx</Item>
+            <Item Name="[Finished TaskContext]" Condition="isFinishedTask()">m_ctx</Item>
+            <Item Name="[Futex]" Condition="isFutex1()">m_au8</Item>
+            <Item Name="[Futex]" Condition="isFutex2()">m_au16</Item>
+            <Item Name="[Futex]" Condition="isFutex4()">m_au32</Item>
+            <Item Name="[Futex]" Condition="isFutex8()">m_au64</Item>
+            <Item Name="[Semaphore]" Condition="isSema()">m_sema</Item>
+            <Item Name="[Name]" Condition="isName()">m_name</Item>
+        </Expand>
+    </Type>
+
+
+    <Type Name="carb::dictionary::Item">
+        <Intrinsic Name="p" Expression="(carb.dictionary.plugin.dll!carb::dictionary::Item*)this" />
+        <Intrinsic Name="isArray" Expression="!!(p()->internalFlags &amp; 1)" />
+        <DisplayString Condition="p()->type==0">[{p()->name}] eBool {p()->boolData}</DisplayString>
+        <DisplayString Condition="p()->type==1">[{p()->name}] eInt {p()->intData}</DisplayString>
+        <DisplayString Condition="p()->type==2">[{p()->name}] eFloat {p()->floatData}</DisplayString>
+        <DisplayString Condition="p()->type==3">[{p()->name}] eString {p()->stringData}</DisplayString>
+        <DisplayString Condition="p()->type==4 &amp;&amp; isArray()">[{p()->name}] eDictionary {p()->arrayData}</DisplayString>
+        <DisplayString Condition="p()->type==4 &amp;&amp; !isArray()">[{p()->name}] eDictionary {p()->mapData}</DisplayString>
+        <Expand>
+            <Item Name="[name]">p()->name</Item>
+            <Item Name="[type]">p()->type</Item>
+            <Item Condition="p()->type==0" Name="[bool]">p()->boolData</Item>
+            <Item Condition="p()->type==1" Name="[int64]">p()->intData</Item>
+            <Item Condition="p()->type==2" Name="[double]">p()->floatData</Item>
+            <Item Condition="p()->type==3" Name="[string]">p()->stringData</Item>
+            <Item Condition="p()->type==4 &amp;&amp; isArray()" Name="[array]">p()->arrayData</Item>
+            <Item Condition="p()->type==4 &amp;&amp; !isArray()" Name="[map]">p()->mapData</Item>
+            <Item Name="[root]">p()->root</Item>
+            <Item Name="[parent]">p()->parent</Item>
+            <Item Name="[raw]">p(),!</Item>
+        </Expand>
+    </Type>
+
+    <!-- Carbonite types -->
+    <Type Name="carb::RString">
+        <DisplayString Condition="m_stringId &gt;= 2097152">[Invalid]</DisplayString>
+        <DisplayString Condition="m_stringId &lt; 2097152">{(carb::detail::rstring::Visualizer[m_stringId / 16384][m_stringId % 16384])->m_string}</DisplayString>
+        <StringView Condition="m_stringId &lt; 2097152">(carb::detail::rstring::Visualizer[m_stringId / 16384][m_stringId % 16384])->m_string</StringView>
+    </Type>
+    <Type Name="carb::RStringU">
+        <DisplayString Condition="m_stringId &gt;= 2097152">[Invalid]</DisplayString>
+        <DisplayString Condition="m_stringId &lt; 2097152">{(carb::detail::rstring::Visualizer[m_stringId / 16384][m_stringId % 16384])->m_string}</DisplayString>
+        <StringView Condition="m_stringId &lt; 2097152">(carb::detail::rstring::Visualizer[m_stringId / 16384][m_stringId % 16384])->m_string</StringView>
+    </Type>
+    <Type Name="carb::RStringKey">
+        <DisplayString Condition="m_stringId &gt;= 2097152">[Invalid]</DisplayString>
+        <DisplayString Condition="m_stringId &lt; 2097152 &amp;&amp; m_number &gt; 0">{(carb::detail::rstring::Visualizer[m_stringId / 16384][m_stringId % 16384])->m_string}_{m_number}</DisplayString>
+        <DisplayString Condition="m_stringId &lt; 2097152">{(carb::detail::rstring::Visualizer[m_stringId / 16384][m_stringId % 16384])->m_string}</DisplayString>
+        <StringView Condition="m_stringId &lt; 2097152">(carb::detail::rstring::Visualizer[m_stringId / 16384][m_stringId % 16384])->m_string</StringView>
+    </Type>
+    <Type Name="carb::RStringUKey">
+        <DisplayString Condition="m_stringId &gt;= 2097152">[Invalid]</DisplayString>
+        <DisplayString Condition="m_stringId &lt; 2097152 &amp;&amp; m_number &gt; 0">{(carb::detail::rstring::Visualizer[m_stringId / 16384][m_stringId % 16384])->m_string}_{m_number}</DisplayString>
+        <DisplayString Condition="m_stringId &lt; 2097152">{(carb::detail::rstring::Visualizer[m_stringId / 16384][m_stringId % 16384])->m_string}</DisplayString>
+        <StringView Condition="m_stringId &lt; 2097152">(carb::detail::rstring::Visualizer[m_stringId / 16384][m_stringId % 16384])->m_string</StringView>
+    </Type>
+
+    <Type Name="carb::container::IntrusiveList&lt;*,*&gt;">
+        <DisplayString Condition="m_list.m_next == &amp;m_list">{{ empty }}</DisplayString>
+        <DisplayString Condition="m_list.m_next != &amp;m_list">{{ size={m_size} }}</DisplayString>
+        <Expand>
+            <LinkedListItems>
+                <Size>m_size</Size>
+                <HeadPointer>m_list.m_next</HeadPointer>
+                <NextPointer>m_next</NextPointer>
+                <ValueNode>*($T1*)((char*)this-$T2)</ValueNode>
+            </LinkedListItems>
+        </Expand>
+    </Type>
+    <Type Name="carb::container::IntrusiveListLink&lt;*&gt;">
+        <DisplayString Condition="!!m_next">{{ in list }}</DisplayString>
+        <DisplayString Condition="!m_next">{{ not in list }}</DisplayString>
+    </Type>
+
+    <Type Name="carb::container::LocklessStack&lt;*,*&gt;">
+        <Intrinsic Name="head" Expression="*(uint64_t*)&amp;m_head" />
+        <Intrinsic Name="seqMask" Expression="1023" /> <!-- kSeqMask -->
+        <Intrinsic Name="cpuBits" Expression="7" /> <!-- kCpuBits-->
+        <Intrinsic Name="phead" Expression="(LocklessStackLink&lt;$T1&gt;*)((((ptrdiff_t)head()) &amp; ~seqMask()) >> cpuBits())" />
+        <Intrinsic Name="convert" Expression="($T1*)((char*)Ptr - $T2)">
+            <Parameter Name="Ptr" Type="LocklessStackLink&lt;$T1&gt;*"/>
+        </Intrinsic>
+        <DisplayString Condition="!phead()">{{ empty }}</DisplayString>
+        <DisplayString>{{ not empty }}</DisplayString>
+        <Expand>
+            <CustomListItems MaxItemsPerView="1000">
+                <Variable Name="Head" InitialValue="phead()"/>
+                <Loop Condition="Head">
+                    <Item>convert(Head)</Item>
+                    <Exec>Head = Head->m_next</Exec>
+                </Loop>
+            </CustomListItems>
+        </Expand>
+    </Type>
+
+    <Type Name="carb::container::LocklessQueue&lt;*,*&gt;">
+        <Intrinsic Name="head" Expression="*($T1**)&amp;m_head" />
+        <Intrinsic Name="tail" Expression="*($T1**)&amp;m_tail" />
+        <Intrinsic Name="link" Expression="(LocklessQueueLink&lt;$T1&gt;*)((char*)Ptr + $T2)">
+            <Parameter Name="Ptr" Type="$T1*"/>
+        </Intrinsic>
+        <DisplayString Condition="!tail()">{{ empty }}</DisplayString>
+        <DisplayString>{{ not empty }}</DisplayString>
+        <Expand>
+            <CustomListItems MaxItemsPerView="1000">
+                <Variable Name="Head" InitialValue="head()"/>
+                <Loop>
+                    <Break Condition="!Head"/>
+                    <Item>Head</Item>
+                    <Exec>Head = *($T1**)&amp;link(Head)->m_next</Exec>
+                </Loop>
+            </CustomListItems>
+        </Expand>
+    </Type>
+
+    <Type Name="carb::container::detail::RobinHood&lt;*,*,*,*,*,*&gt;">
+        <DisplayString>{{ size={m_data.m_size} }}</DisplayString>
+        <Expand>
+            <Item Name="[size]">m_data.m_size</Item>
+            <Item Name="[capacity]">(m_data.m_tableSize * $T1) / 100</Item>
+            <Item Name="[table size]">m_data.m_tableSize</Item>
+            <Item Name="[load factor (closer to 1.0 better)]">((double)m_data.m_size) / ((double)m_data.m_tableSize),f</Item>
+            <CustomListItems MaxItemsPerView="100">
+                <Variable Name="Iter" InitialValue="0"/>
+                <Loop>
+                    <Break Condition="Iter &gt;= m_data.m_tableSize"/>
+                    <!-- Uncomment below for distance measurements too -->
+                    <If Condition="m_data.m_hashes[Iter] != 0x7fffffffffffffff &amp;&amp; !(m_data.m_hashes[Iter] &amp; 0x8000000000000000)">
+                        <Item Name="[{Iter}]" >m_data.m_table[Iter]</Item>
+                        <!--<Item Name="[{Iter} w/ distance {(Iter - m_data.m_hashes[Iter]) &amp; (m_data.m_tableSize - 1)}]" >m_data.m_table[Iter]</Item>-->
+                    </If>
+                    <!--
+                    <If Condition="!!(m_data.m_hashes[Iter] &amp; 0x8000000000000000)">
+                        <Item Name="[{Iter}] Deleted w/ distance:" >(Iter - m_data.m_hashes[Iter]) &amp; (m_data.m_tableSize - 1)</Item>
+                    </If>
+                    -->
+                    <Exec>Iter++</Exec>
+                </Loop>
+            </CustomListItems>
+        </Expand>
+    </Type>
+
+    <Type Name="carb::container::detail::RobinHood&lt;*,*,*,*,*,*&gt;::const_find_iterator">
+        <DisplayString Condition="owner &amp;&amp; where">[find iter] {*where}</DisplayString>
+        <DisplayString Condition="owner">[find iter] (end)</DisplayString>
+        <DisplayString Condition="!owner">[find iter] (invalid)</DisplayString>
+        <Expand>
+            <Item Name="[owner]">owner</Item>
+            <Item Name="[pointer]">where</Item>
+        </Expand>
+    </Type>
+
+    <Type Name="carb::container::detail::RobinHood&lt;*,*,*,*,*,*&gt;::const_iterator">
+        <DisplayString Condition="owner &amp;&amp; where">[iter] {*where}</DisplayString>
+        <DisplayString Condition="owner">[iter] (end)</DisplayString>
+        <DisplayString Condition="!owner">[iter] (invalid)</DisplayString>
+        <Expand>
+            <Item Name="[owner]">owner</Item>
+            <Item Name="[pointer]">where</Item>
+        </Expand>
+    </Type>
+
+    <Type Name="carb::cpp20::counting_semaphore&lt;*&gt;">
+        <DisplayString Condition="$T1==1" Optional="1">{{ count={(int)*(uint8_t*)&amp;m_val} }}</DisplayString>
+        <DisplayString Condition="$T1!=1" Optional="1">{{ waiters={(*(uint64_t*)&amp;m_data)&gt;&gt;32} count={(*(uint64_t*)&amp;m_data) &amp; 0xffffffff} }}</DisplayString>
+    </Type>
+
+    <Type Name="carb::cpp20::span&lt;*,0&gt;" Priority="High">
+        <DisplayString>{{ size=0 }}</DisplayString>
+    </Type>
+
+    <Type Name="carb::cpp20::span&lt;*,-1&gt;" Priority="High">
+        <DisplayString>{{ size={m_size} }}</DisplayString>
+        <Expand>
+            <ArrayItems>
+                <Size>m_size</Size>
+                <ValuePointer>m_p</ValuePointer>
+            </ArrayItems>
+        </Expand>
+    </Type>
+
+    <Type Name="carb::cpp20::span&lt;*,*&gt;">
+        <DisplayString>{{ size={$T2} }}</DisplayString>
+        <Expand>
+            <ArrayItems>
+                <Size>$T2</Size>
+                <ValuePointer>m_p</ValuePointer>
+            </ArrayItems>
+        </Expand>
+    </Type>
+
+    <Type Name="carb::extras::HandleDatabase&lt;*,*&gt;">
+        <Intrinsic Name="at" Expression="*(HandleData**)&amp;m_database[Index]">
+            <Parameter Name="Index" Type="size_t"/>
+        </Intrinsic>
+        <Intrinsic Name="meta" Expression="*(uint64_t*)&amp;HData->metadata">
+            <Parameter Name="HData" Type="HandleData*"/>
+        </Intrinsic>
+        <Intrinsic Name="refs" Expression="meta(HData) &amp; 0xffffffff">
+            <Parameter Name="HData" Type="HandleData*"/>
+        </Intrinsic>
+        <Intrinsic Name="lifecycle" Expression="meta(HData) &amp; 0xffffffff00000000">
+            <Parameter Name="HData" Type="HandleData*"/>
+        </Intrinsic>
+        <Intrinsic Name="buckets" Expression="31" /> <!-- kBuckets -->
+        <DisplayString>{{ HandleDatabase }}</DisplayString>
+        <Expand>
+            <CustomListItems MaxItemsPerView="100">
+                <Variable Name="Iter" InitialValue="0"/>
+                <Variable Name="Max" InitialValue="1"/>
+                <Variable Name="Inner" InitialValue="0"/>
+                <Variable Name="HD" InitialValue="(HandleData*)0"/>
+                <Loop Condition="Iter &lt; buckets()">
+                    <Break Condition="!at(Iter)"/>
+                    <Exec>Inner = 0</Exec>
+                    <Loop>
+                        <Break Condition="Inner &gt;= Max"/>
+                        <Exec>HD = &amp;(at(Iter)[Inner])</Exec>
+                        <If Condition="refs(HD) != 0">
+                            <Item Name="{(size_t)(lifecycle(HD) + ((Max - 1) + Inner))}">*HD</Item>
+                        </If>
+                        <Exec>Inner++</Exec>
+                    </Loop>
+                    <Exec>Max *= 2</Exec>
+                    <Exec>Iter++</Exec>
+                </Loop>
+            </CustomListItems>
+        </Expand>
+    </Type>
+
+    <Type Name="carb::extras::HandleDatabase&lt;*,*&gt;::HandleData">
+        <Intrinsic Name="meta" Expression="*(uint64_t*)&amp;metadata" />
+        <Intrinsic Name="refs" Expression="meta() &amp; 0xffffffff" />
+        <DisplayString Condition="!!refs()">{{ {val} }}</DisplayString>
+        <DisplayString>{{ free entry }}</DisplayString>
+        <Expand>
+            <Item Name="[refcount]">refs()</Item>
+            <Item Condition="!!refs()" Name="[value]">&amp;val</Item>
+        </Expand>
+    </Type>
+
+    <Type Name="carb::thread::mutex">
+        <AlternativeType Name="carb::thread::recursive_mutex" />
+        <Intrinsic Name="isLocked" Expression="(size_t)m_lock.Ptr != 0" />
+        <DisplayString Condition="isLocked()">{{ locked by thread {m_owner} }}</DisplayString>
+        <DisplayString>{{ unlocked }}</DisplayString>
+        <Expand>
+            <Item Name="[owner thread id]" Condition="isLocked()">m_owner</Item>
+            <Item Name="[depth]" Condition="isLocked()">m_count</Item>
+        </Expand>
+    </Type>
+    <Type Name="carb::thread::shared_mutex" Inheritable="0">
+        <Intrinsic Name="val" Expression="(size_t)m_lock.Ptr" />
+        <DisplayString Condition="val() == 0">{{ unlocked }}</DisplayString>
+        <DisplayString Condition="val() == 1">{{ locked (exclusive) }}</DisplayString>
+        <DisplayString Condition="(val() &amp; (~0xf | 1)) &gt; 1">{{ locked (shared) }}</DisplayString>
+        <Expand>
+            <Item Name="[owners]" Optional="true">m_owners</Item> <!-- Debug only -->
+        </Expand>
+    </Type>
+    <Type Name="carb::thread::recursive_shared_mutex">
+        <Intrinsic Name="val" Expression="(size_t)m_lock.Ptr" />
+        <DisplayString Condition="val() == 0">{{ unlocked }}</DisplayString>
+        <DisplayString Condition="val() == 1">{{ locked (exclusive) }}</DisplayString>
+        <DisplayString Condition="(val() &amp; (~0xf | 1)) &gt; 1">{{ locked (shared) }}</DisplayString>
+        <Expand>
+            <Item Name="[owners]" Optional="true">m_owners</Item> <!-- Debug only -->
+            <Item Name="[this thread's lock list]" Optional="true">carb::thread::detail::lockListData.tls.value()</Item>
+        </Expand>
+    </Type>
+    <Type Name="carb::thread::ThreadLocal&lt;*,1&gt;">
+        <Intrinsic Name="value" Expression="($T1)::TlsGetValue(m_key)" />
+        <DisplayString>{{ key={m_key} }}</DisplayString>
+        <Expand>
+            <Item Name="[TLS Key]">m_key</Item>
+            <Item Name="[This thread's value]">value()</Item>
+        </Expand>
+    </Type>
+    <Type Name="carb::thread::ThreadLocal&lt;*,0&gt;">
+        <Intrinsic Name="value" Expression="*($T1*)::TlsGetValue(m_key)" />
+        <DisplayString>{{ key={m_key} }}</DisplayString>
+        <Expand>
+            <Item Name="[TLS Key]">m_key</Item>
+            <Item Name="[This thread's value]">value()</Item>
+        </Expand>
+    </Type>
+
+    <Type Name="carb::cpp17::basic_string_view&lt;*,*&gt;">
+        <Intrinsic Name="size" Expression="m_count" />
+        <Intrinsic Name="data" Expression="m_data" />
+        <DisplayString>{m_data,[m_count]}</DisplayString>
+        <Expand>
+            <Item Name="[size]" ExcludeView="simple">size()</Item>
+            <ArrayItems>
+                <Size>size()</Size>
+                <ValuePointer>data()</ValuePointer>
+            </ArrayItems>
+        </Expand>
+    </Type>
+
+    <!--
+    Python code to generate block below, change n to increase maximum number of variants.
+    
+        n = 16
+
+        print('\t<Type Name="carb::cpp17::variant&lt;*&gt;">')
+        print('\t\t<Intrinsic Name="index" Expression="(int)m_index"/>')
+        print('\t\t<DisplayString Condition="index() &lt; 0">&lt;valueless_by_exception&gt;</DisplayString>')
+        s = "m_value"
+        for i in range(n):
+            print(f'\t\t<DisplayString Condition="index() == {{{i}}}" Optional="true">{{{{ index = {{{i}}}, value = {{{s}}} }}}}</DisplayString>')
+            s = "m_next." + s
+        print("\t\t<Expand>")
+        print('\t\t\t<Item Name="index">index()</Item>')
+        s = "m_value"
+        for i in range(n):
+            print(f'\t\t\t<Item Name="value" Condition="index() == {i}" Optional="true">{s}</Item>')
+            s = "m_next." + s
+        print("\t\t</Expand>")
+        print("\t</Type>")
+
+    -->
+	<Type Name="carb::cpp17::variant&lt;*&gt;">
+		<Intrinsic Name="index" Expression="(int)m_index"/>
+		<DisplayString Condition="index() &lt; 0">&lt;valueless_by_exception&gt;</DisplayString>
+		<DisplayString Condition="index() == {0}" Optional="true">{{ index = {0}, value = {{m_value }}</DisplayString>
+		<DisplayString Condition="index() == {1}" Optional="true">{{ index = {1}, value = {{m_next.m_value }}</DisplayString>
+		<DisplayString Condition="index() == {2}" Optional="true">{{ index = {2}, value = {{m_next.m_next.m_value }}</DisplayString>
+		<DisplayString Condition="index() == {3}" Optional="true">{{ index = {3}, value = {{m_next.m_next.m_next.m_value }}</DisplayString>
+		<DisplayString Condition="index() == {4}" Optional="true">{{ index = {4}, value = {{m_next.m_next.m_next.m_next.m_value }}</DisplayString>
+		<DisplayString Condition="index() == {5}" Optional="true">{{ index = {5}, value = {{m_next.m_next.m_next.m_next.m_next.m_value }}</DisplayString>
+		<DisplayString Condition="index() == {6}" Optional="true">{{ index = {6}, value = {{m_next.m_next.m_next.m_next.m_next.m_next.m_value }}</DisplayString>
+		<DisplayString Condition="index() == {7}" Optional="true">{{ index = {7}, value = {{m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_value }}</DisplayString>
+		<DisplayString Condition="index() == {8}" Optional="true">{{ index = {8}, value = {{m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_value }}</DisplayString>
+		<DisplayString Condition="index() == {9}" Optional="true">{{ index = {9}, value = {{m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_value }}</DisplayString>
+		<DisplayString Condition="index() == {10}" Optional="true">{{ index = {10}, value = {{m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_value }}</DisplayString>
+		<DisplayString Condition="index() == {11}" Optional="true">{{ index = {11}, value = {{m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_value }}</DisplayString>
+		<DisplayString Condition="index() == {12}" Optional="true">{{ index = {12}, value = {{m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_value }}</DisplayString>
+		<DisplayString Condition="index() == {13}" Optional="true">{{ index = {13}, value = {{m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_value }}</DisplayString>
+		<DisplayString Condition="index() == {14}" Optional="true">{{ index = {14}, value = {{m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_value }}</DisplayString>
+		<DisplayString Condition="index() == {15}" Optional="true">{{ index = {15}, value = {{m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_value }}</DisplayString>
+		<Expand>
+			<Item Name="index">index()</Item>
+			<Item Name="value" Condition="index() == 0" Optional="true">m_value</Item>
+			<Item Name="value" Condition="index() == 1" Optional="true">m_next.m_value</Item>
+			<Item Name="value" Condition="index() == 2" Optional="true">m_next.m_next.m_value</Item>
+			<Item Name="value" Condition="index() == 3" Optional="true">m_next.m_next.m_next.m_value</Item>
+			<Item Name="value" Condition="index() == 4" Optional="true">m_next.m_next.m_next.m_next.m_value</Item>
+			<Item Name="value" Condition="index() == 5" Optional="true">m_next.m_next.m_next.m_next.m_next.m_value</Item>
+			<Item Name="value" Condition="index() == 6" Optional="true">m_next.m_next.m_next.m_next.m_next.m_next.m_value</Item>
+			<Item Name="value" Condition="index() == 7" Optional="true">m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_value</Item>
+			<Item Name="value" Condition="index() == 8" Optional="true">m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_value</Item>
+			<Item Name="value" Condition="index() == 9" Optional="true">m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_value</Item>
+			<Item Name="value" Condition="index() == 10" Optional="true">m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_value</Item>
+			<Item Name="value" Condition="index() == 11" Optional="true">m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_value</Item>
+			<Item Name="value" Condition="index() == 12" Optional="true">m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_value</Item>
+			<Item Name="value" Condition="index() == 13" Optional="true">m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_value</Item>
+			<Item Name="value" Condition="index() == 14" Optional="true">m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_value</Item>
+			<Item Name="value" Condition="index() == 15" Optional="true">m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_next.m_value</Item>
+		</Expand>
+	</Type>
+    <Type Name="carb::cpp17::optional&lt;*&gt;">
+        <DisplayString Condition="!hasValue">{{ empty }}</DisplayString>
+        <DisplayString Condition="hasValue">{ *($T1*)this }</DisplayString>
+        <Expand>
+            <Item Name="[has_value]" Condition="!hasValue">false</Item>
+            <Item Name="[has_value]" Condition="hasValue">true</Item>
+            <Item Name="[value]" Condition="hasValue">*($T1*)this</Item>
+        </Expand>
+    </Type>
+
+    <Type Name="omni::string">
+        <Intrinsic Name="isShortString" Expression="m_local_data[31] &lt;= 31" />
+        <Intrinsic Name="size" Expression="isShortString() ? (31 - m_local_data[31]) : m_allocated_data.m_size" />
+        <Intrinsic Name="capacity" Expression="isShortString() ? 31 : m_allocated_data.m_capacity" />
+        <Intrinsic Name="data" Expression="isShortString() ? m_local_data : m_allocated_data.m_ptr" />
+        <DisplayString Condition="size() == 0">empty</DisplayString>
+        <DisplayString>{data(),na}</DisplayString>
+        <Expand>
+            <Item Name="[size]" ExcludeView="simple">size()</Item>
+            <Item Name="[capacity]" ExcludeView="simple">capacity()</Item>
+            <ArrayItems>
+                <Size>size()</Size>
+                <ValuePointer>data()</ValuePointer>
+            </ArrayItems>
+        </Expand>
+    </Type>
+</AutoVisualizer>

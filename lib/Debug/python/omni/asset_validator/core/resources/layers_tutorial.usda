@@ -1,0 +1,15 @@
+#usda 1.0
+(
+    subLayers = [
+        @./tutorial.usda@
+    ]
+)
+
+def Xform "Hello"
+{
+    def Sphere "World"
+    {
+        double3 xformOp:translate = (-250, 0, 0)
+        uniform token[] xformOpOrder = ["xformOp:translate"]
+    }
+}

@@ -17,7 +17,7 @@ class Ui_AdjustDefaultMaterial(object):
     def setupUi(self, AdjustDefaultMaterial):
         if not AdjustDefaultMaterial.objectName():
             AdjustDefaultMaterial.setObjectName(u"AdjustDefaultMaterial")
-        AdjustDefaultMaterial.resize(238, 123)
+        AdjustDefaultMaterial.resize(280, 123)
         sizePolicy = QSizePolicy(QSizePolicy.Minimum, QSizePolicy.Minimum)
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
@@ -111,6 +111,7 @@ class Ui_AdjustDefaultMaterial(object):
     # setupUi
 
     def retranslateUi(self, AdjustDefaultMaterial):
+        AdjustDefaultMaterial.setWindowTitle(QCoreApplication.translate("AdjustDefaultMaterial", u"Adjust Default Material", None))
         AdjustDefaultMaterial.setProperty("comment", QCoreApplication.translate("AdjustDefaultMaterial", u"\n"
 "     Copyright 2017 Pixar                                                                   \n"
 "                                                                                            \n"
@@ -135,7 +136,6 @@ class Ui_AdjustDefaultMaterial(object):
 "     KIND, either express or implied. See the Apache License for the specific               \n"
 "     language governing permissions and limitations under the Apache License.               \n"
 "  ", None))
-        AdjustDefaultMaterial.setWindowTitle(QCoreApplication.translate("AdjustDefaultMaterial", u"Adjust Default Material", None))
         self.ambientInt.setText(QCoreApplication.translate("AdjustDefaultMaterial", u"Ambient Intensity", None))
         self.specularInt.setText(QCoreApplication.translate("AdjustDefaultMaterial", u"Specular Intensity", None))
         self.resetButton.setText(QCoreApplication.translate("AdjustDefaultMaterial", u"Reset", None))

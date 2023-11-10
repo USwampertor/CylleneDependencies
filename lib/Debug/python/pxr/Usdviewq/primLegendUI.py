@@ -55,17 +55,17 @@ class Ui_PrimLegend(object):
 
         self.primLegendLayout.addWidget(self.primLegendLabelInstance, 0, 3, 1, 1)
 
-        self.primLegendColorMaster = QGraphicsView(PrimLegend)
-        self.primLegendColorMaster.setObjectName(u"primLegendColorMaster")
-        self.primLegendColorMaster.setMaximumSize(QSize(20, 15))
+        self.primLegendColorPrototype = QGraphicsView(PrimLegend)
+        self.primLegendColorPrototype.setObjectName(u"primLegendColorPrototype")
+        self.primLegendColorPrototype.setMaximumSize(QSize(20, 15))
 
-        self.primLegendLayout.addWidget(self.primLegendColorMaster, 0, 4, 1, 1)
+        self.primLegendLayout.addWidget(self.primLegendColorPrototype, 0, 4, 1, 1)
 
-        self.primLegendLabelMaster = QLabel(PrimLegend)
-        self.primLegendLabelMaster.setObjectName(u"primLegendLabelMaster")
-        self.primLegendLabelMaster.setFont(font)
+        self.primLegendLabelPrototype = QLabel(PrimLegend)
+        self.primLegendLabelPrototype.setObjectName(u"primLegendLabelPrototype")
+        self.primLegendLabelPrototype.setFont(font)
 
-        self.primLegendLayout.addWidget(self.primLegendLabelMaster, 0, 5, 1, 1)
+        self.primLegendLayout.addWidget(self.primLegendLabelPrototype, 0, 5, 1, 1)
 
         self.primLegendColorNormal = QGraphicsView(PrimLegend)
         self.primLegendColorNormal.setObjectName(u"primLegendColorNormal")
@@ -140,7 +140,7 @@ class Ui_PrimLegend(object):
 "  ", None))
         self.primLegendLabelHasArcs.setText(QCoreApplication.translate("PrimLegend", u"HasArcs", None))
         self.primLegendLabelInstance.setText(QCoreApplication.translate("PrimLegend", u"Instance", None))
-        self.primLegendLabelMaster.setText(QCoreApplication.translate("PrimLegend", u"Master", None))
+        self.primLegendLabelPrototype.setText(QCoreApplication.translate("PrimLegend", u"Prototype", None))
         self.primLegendLabelNormal.setText(QCoreApplication.translate("PrimLegend", u"Normal", None))
         self.primLegendLabelDimmed.setText(QCoreApplication.translate("PrimLegend", u"Dimmed colors denote inactive prims", None))
         self.primLegendLabelFontsAbstract.setText(QCoreApplication.translate("PrimLegend", u"Normal font indicates abstract prims(class and children)", None))

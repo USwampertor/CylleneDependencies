@@ -16,9 +16,9 @@
                         "primary": true,
                         "target": "usd"
                     },
-                    "OmniUsdObjectFileFormat": {
+                    "OmniUsdLiveFileFormat": {
                         "bases": [ "SdfFileFormat" ],
-                        "displayName": "Omniverse Object file format",
+                        "displayName": "Omniverse Live file format",
                         "extensions": [ "live" ],
                         "formatId": "live",
                         "primary": true,
