@@ -41,12 +41,27 @@ void EventQueue::update()
 {
     MSG msg = {};
 
-    while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE))
+    for (;;)
     {
-        // Translate virtual key messages
+        if (processingMode == ProcessingMode::Poll)
+        {
+            if (!PeekMessage(&msg, NULL, 0, 0, PM_REMOVE))
+                break;
+        }
+        else
+            GetMessage(&msg, NULL, 0, 0);
+
+        if (msg.message == WM_QUIT)
+            return;
+
         TranslateMessage(&msg);
         DispatchMessage(&msg);
     }
+}
+
+void EventQueue::setProcessingMode(ProcessingMode mode)
+{
+    processingMode = mode;
 }
 
 LRESULT EventQueue::pushEvent(MSG msg, Window* window)
@@ -90,6 +105,10 @@ LRESULT EventQueue::pushEvent(MSG msg, Window* window)
         unsigned g = (bg & 0x00ff0000) >> 16;
         unsigned b = (bg & 0x0000ff00) >> 8;
         HBRUSH BorderBrush = CreateSolidBrush(RGB(r, g, b));
+        rect.left = 0;
+        rect.top = 0;
+        rect.right = cxWidth;
+        rect.bottom = cyHeight;
         FillRect(ps.hdc, &rect, BorderBrush);
         EndPaint(window->hwnd, &ps);
 
@@ -262,9 +281,6 @@ LRESULT EventQueue::pushEvent(MSG msg, Window* window)
                 xwin::MouseRawData(static_cast<int>(raw->data.mouse.lLastX),
                                    static_cast<int>(raw->data.mouse.lLastY)),
                 window);
-
-            // printf("%.3f, %.3f\n",
-            // raw->data.mouse.lLastX,raw->data.mouse.lLastY)
         }
 
         delete[] lpb;
@@ -593,6 +609,10 @@ LRESULT EventQueue::pushEvent(MSG msg, Window* window)
         case VK_RMENU:
             d = Key::LAlt;
             break;
+        case VK_LWIN:
+        case VK_RWIN:
+            d = Key::LWin;
+            break;
         case VK_OEM_PERIOD:
             d = Key::Period;
             break;
@@ -632,6 +652,10 @@ LRESULT EventQueue::pushEvent(MSG msg, Window* window)
         if (d == Key::LShift && GetKeyState(VK_RSHIFT))
         {
             d = Key::RShift;
+        }
+        if (d == Key::LShift && GetKeyState(VK_RWIN))
+        {
+            d = Key::RWin;
         }
         short modifiers = LOWORD(msg.wParam);
         ModifierState ms;
@@ -786,11 +810,10 @@ LRESULT EventQueue::pushEvent(MSG msg, Window* window)
 
     // Some events may require resizing the current window,
     // such as DPI events.
-    if (
-        !(currentWindowRect.right == currentWindowRect.left &&
-        currentWindowRect.right == currentWindowRect.top &&
-        currentWindowRect.right == currentWindowRect.bottom &&
-        currentWindowRect.right == -1))
+    if (!(currentWindowRect.right == currentWindowRect.left &&
+          currentWindowRect.right == currentWindowRect.top &&
+          currentWindowRect.right == currentWindowRect.bottom &&
+          currentWindowRect.right == -1))
     {
         RECT* const prcNewWindow = (RECT*)msg.lParam;
         SetWindowPos(window->hwnd, NULL, currentWindowRect.left,
