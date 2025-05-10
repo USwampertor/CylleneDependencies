@@ -9,11 +9,86 @@ namespace xwin
 // Based on Microsoft Win32 Open Dialog examples and documentation.
 // https://docs.microsoft.com/en-us/windows/desktop/learnwin32/example--the-open-dialog-box
 
-void showMessageBox(const MessageDesc& mdesc)
+MessageResponse showMessageBox(const MessageDesc& mdesc)
 {
-    UINT flags = MB_APPLMODAL | MB_SETFOREGROUND | MB_ICONINFORMATION;
+  UINT flags = MB_APPLMODAL | MB_SETFOREGROUND;
+
+  // Set buttons
+  switch (mdesc.buttons)
+  {
+  case MessageButtons::OK:
     flags |= MB_OK;
-    MessageBox(nullptr, "Text", "Title", flags);
+    break;
+  case MessageButtons::OKCancel:
+    flags |= MB_OKCANCEL;
+    break;
+  case MessageButtons::YesNo:
+    flags |= MB_YESNO;
+    break;
+  case MessageButtons::YesNoCancel:
+    flags |= MB_YESNOCANCEL;
+    break;
+  case MessageButtons::RetryCancel:
+    flags |= MB_RETRYCANCEL;
+    break;
+  case MessageButtons::AbortRetryIgnore:
+    flags |= MB_ABORTRETRYIGNORE;
+    break;
+  }
+
+  // Set icon
+  switch (mdesc.icon)
+  {
+  case MessageIcon::Information:
+    flags |= MB_ICONINFORMATION;
+    break;
+  case MessageIcon::Warning:
+    flags |= MB_ICONWARNING;
+    break;
+  case MessageIcon::Error:
+    flags |= MB_ICONERROR;
+    break;
+  case MessageIcon::Question:
+    flags |= MB_ICONQUESTION;
+    break;
+  case MessageIcon::None:
+    break;
+  }
+
+  // Set default button
+  switch (mdesc.defaultButton)
+  {
+  case MessageDefaultButton::Button1:
+    flags |= MB_DEFBUTTON1;
+    break;
+  case MessageDefaultButton::Button2:
+    flags |= MB_DEFBUTTON2;
+    break;
+  case MessageDefaultButton::Button3:
+    flags |= MB_DEFBUTTON3;
+    break;
+  }
+
+  // Convert strings to wide chars
+  std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
+  // std::wstring wideTitle = converter.from_bytes(mdesc.title);
+  // std::wstring wideContent = converter.from_bytes(mdesc.content);
+
+  // Show message box
+  int result = MessageBox(nullptr, mdesc.content.c_str(), mdesc.title.c_str(), flags);
+
+  // Convert result to our enum
+  switch (result)
+  {
+  case IDOK: return MessageResponse::OK;
+  case IDCANCEL: return MessageResponse::Cancel;
+  case IDYES: return MessageResponse::Yes;
+  case IDNO: return MessageResponse::No;
+  case IDRETRY: return MessageResponse::Retry;
+  case IDABORT: return MessageResponse::Abort;
+  case IDIGNORE: return MessageResponse::Ignore;
+  default: return MessageResponse::Cancel;
+  }
 }
 
 bool showOpenDialog(const OpenSaveDialogDesc& odesc, std::string& outPath)

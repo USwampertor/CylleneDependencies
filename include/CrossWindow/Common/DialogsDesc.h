@@ -6,15 +6,50 @@
 namespace xwin
 {
 
-enum class MessageType
+enum class MessageButtons
 {
-    Warning,
-    MessageTypeMax
+  OK,
+  OKCancel,
+  YesNo,
+  YesNoCancel,
+  RetryCancel,
+  AbortRetryIgnore
+};
+
+enum class MessageIcon
+{
+  None,
+  Information,
+  Warning,
+  Error,
+  Question
+};
+
+enum class MessageDefaultButton
+{
+  Button1,
+  Button2,
+  Button3
+};
+
+enum class MessageResponse
+{
+  OK,
+  Cancel,
+  Yes,
+  No,
+  Retry,
+  Abort,
+  Ignore
 };
 
 struct MessageDesc
 {
-    MessageType type; //OK, Error, etc.
+  std::string title;
+  std::string content;
+  MessageButtons buttons = MessageButtons::OK;
+  MessageIcon icon = MessageIcon::None;
+  MessageDefaultButton defaultButton = MessageDefaultButton::Button1;
 };
 
 struct OpenSaveDialogDesc
