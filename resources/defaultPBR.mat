@@ -1,0 +1,8 @@
+{
+  "type": "material",
+  "baseShader": "pixelShader",
+  "values": {
+    "txColor": "cube_base"
+  }
+}
+
